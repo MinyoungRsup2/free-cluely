@@ -2,8 +2,8 @@ import { ToastProvider } from "./components/ui/toast"
 import Queue from "./_pages/Queue"
 import { ToastViewport } from "@radix-ui/react-toast"
 import { useEffect, useRef, useState } from "react"
-import Solutions from "./_pages/Solutions"
 import { QueryClient, QueryClientProvider } from "react-query"
+import { Lens } from "./components/Lens"
 
 declare global {
   interface Window {
@@ -46,6 +46,47 @@ declare global {
       moveWindowLeft: () => Promise<void>
       moveWindowRight: () => Promise<void>
       quitApp: () => Promise<void>
+
+      // Realtime monitoring
+      startRealtimeMonitoring: () => Promise<{ success: boolean; error?: string }>
+      stopRealtimeMonitoring: () => Promise<{ success: boolean; error?: string }>
+      executeAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
+      isMonitoring: () => Promise<boolean>
+      onActionsDetected: (callback: (actions: Array<{
+        id: string
+        label: string
+        description: string
+        confidence: number
+      }>) => void) => () => void
+      onActionExecuted: (callback: (data: {
+        actionId: string
+        detectedName?: string
+        patientId?: string
+        consumerData?: any
+        error?: string
+        timestamp: string
+      }) => void) => () => void
+      analyzeCurrentScreen: () => Promise<{ success: boolean; actions?: Array<{
+        id: string
+        label: string
+        description: string
+        confidence: number
+      }>; error?: string }>
+
+      // Lens system events
+      onLensOverlayElements: (callback: (elements: Array<{
+        id: string
+        type: string
+        bounds: { x: number; y: number; width: number; height: number }
+        confidence: number
+        actions: string[]
+      }>) => void) => () => void
+      onLensOrbitalShow: (callback: () => void) => () => void
+      onLensOrbitalHide: (callback: () => void) => () => void
+      onLensActivationStart: (callback: () => void) => () => void
+      onLensActivationSuccess: (callback: (data: any) => void) => () => void
+      onLensActivationError: (callback: (error: any) => void) => () => void
+      onLensDeactivated: (callback: () => void) => () => void
     }
   }
 }
@@ -61,6 +102,7 @@ const queryClient = new QueryClient({
 
 const App: React.FC = () => {
   const [view, setView] = useState<"queue" | "solutions" | "debug">("queue")
+  const [lensVisible, setLensVisible] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Effect for height monitoring
@@ -153,20 +195,19 @@ const App: React.FC = () => {
   }, [])
 
   return (
-    <div ref={containerRef} className="min-h-0">
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          {view === "queue" ? (
-            <Queue setView={setView} />
-          ) : view === "solutions" ? (
-            <Solutions setView={setView} />
-          ) : (
-            <></>
-          )}
-          <ToastViewport />
-        </ToastProvider>
-      </QueryClientProvider>
-    </div>
+    <>
+      <div ref={containerRef} className="min-h-0 flex w-fit">
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+              <Queue setView={setView} />
+            <ToastViewport />
+          </ToastProvider>
+        </QueryClientProvider>
+      </div>
+      
+      {/* Lens Overlay System */}
+      <Lens visible={lensVisible} onVisibilityChange={setLensVisible} />
+    </>
   )
 }
 

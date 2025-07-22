@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useRef } from "react"
 import { useQuery } from "react-query"
-import ScreenshotQueue from "../components/Queue/ScreenshotQueue"
 import {
-  Toast,
-  ToastTitle,
-  ToastDescription,
+
   ToastVariant,
   ToastMessage
 } from "../components/ui/toast"
-import QueueCommands from "../components/Queue/QueueCommands"
+import { RealtimeActions } from "../components/RealtimeActions"
 
 interface QueueProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
@@ -113,6 +110,35 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
           "There are no screenshots to process.",
           "neutral"
         )
+      }),
+      window.electronAPI.onActionExecuted((data) => {
+        if (data.error) {
+          showToast("Action Failed", data.error, "error")
+          alert(`Action Failed: ${data.error}`)
+        } else if (data.detectedName) {
+          showToast("Patient Detected", `Patient: ${data.detectedName}`, "success")
+          console.log("Patient data:", data)
+          
+          // Build alert message with all available data
+          let alertMessage = `Patient Data Extracted:\n\n${data.detectedName}`
+          
+          if (data.patientId) {
+            alertMessage += `\n\nPatient ID: ${data.patientId}`
+          }
+          
+          if (data.consumerData) {
+            alertMessage += `\n\nConsumer Data: ${JSON.stringify(data.consumerData, null, 2)}`
+            
+            // Check if consumer was found and navigation happened
+            if (data.consumerData.findFirstConsumer?.id) {
+              alertMessage += `\n\n🚀 Navigated to Companion URL for Consumer ID: ${data.consumerData.findFirstConsumer.id}`
+            }
+          }
+          
+          alertMessage += `\n\nTimestamp: ${data.timestamp}`
+          
+          alert(alertMessage)
+        }
       })
     ]
 
@@ -122,36 +148,14 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }, [isTooltipVisible, tooltipHeight])
 
-  const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
-    setIsTooltipVisible(visible)
-    setTooltipHeight(height)
+  const handleActionExecute = (actionId: string) => {
+    console.log("Patient extraction action executed:", actionId)
+    showToast("Extracting Patient", "Analyzing Athena EHR for patient information...", "neutral")
   }
 
   return (
-    <div ref={contentRef} className={`bg-transparent w-1/2`}>
-      <div className="px-4 py-3">
-        <Toast
-          open={toastOpen}
-          onOpenChange={setToastOpen}
-          variant={toastMessage.variant}
-          duration={3000}
-        >
-          <ToastTitle>{toastMessage.title}</ToastTitle>
-          <ToastDescription>{toastMessage.description}</ToastDescription>
-        </Toast>
-
-        <div className="space-y-3 w-fit">
-          <ScreenshotQueue
-            isLoading={false}
-            screenshots={screenshots}
-            onDeleteScreenshot={handleDeleteScreenshot}
-          />
-          <QueueCommands
-            screenshots={screenshots}
-            onTooltipVisibilityChange={handleTooltipVisibilityChange}
-          />
-        </div>
-      </div>
+    <div ref={contentRef} className="bg-transparent w-fit flex p-4">
+      <RealtimeActions onActionExecute={handleActionExecute} />
     </div>
   )
 }
