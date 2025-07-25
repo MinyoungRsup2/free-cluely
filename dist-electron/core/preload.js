@@ -227,6 +227,39 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
         return () => {
             electron_1.ipcRenderer.removeListener("lens-analysis-error", subscription);
         };
+    },
+    // Contextual popup methods
+    createContextualPopup: (data, position) => electron_1.ipcRenderer.invoke("create-contextual-popup", { data, position }),
+    closeContextualPopup: () => electron_1.ipcRenderer.invoke("close-contextual-popup"),
+    sendContextualPopupAction: (action) => electron_1.ipcRenderer.send("contextual-popup-action", action),
+    sendContextualPopupClose: () => electron_1.ipcRenderer.send("contextual-popup-close"),
+    onContextualPopupData: (callback) => {
+        const subscription = (_, data) => callback(data);
+        electron_1.ipcRenderer.on("contextual-popup-data", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("contextual-popup-data", subscription);
+        };
+    },
+    onContextualPopupAction: (callback) => {
+        const subscription = (_, action) => callback(action);
+        electron_1.ipcRenderer.on("contextual-popup-action", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("contextual-popup-action", subscription);
+        };
+    },
+    onContextualPopupOpened: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on("contextual-popup-opened", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("contextual-popup-opened", subscription);
+        };
+    },
+    onContextualPopupClosed: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on("contextual-popup-closed", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("contextual-popup-closed", subscription);
+        };
     }
 });
 //# sourceMappingURL=preload.js.map

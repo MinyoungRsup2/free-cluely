@@ -165,6 +165,13 @@ class AppState {
     toggleClickMode() {
         this.windowHelper.toggleClickMode();
     }
+    // E key interaction control methods
+    enableOverlayInteraction() {
+        this.windowHelper.enableOverlayInteraction();
+    }
+    disableOverlayInteraction() {
+        this.windowHelper.disableOverlayInteraction();
+    }
     // Element overlay window management
     createElementOverlayWindow(elementId, bounds) {
         return this.windowHelper.createElementOverlayWindow(elementId, bounds);
@@ -184,6 +191,16 @@ class AppState {
     }
     getSelectionOverlayWindow() {
         return this.windowHelper.getSelectionOverlayWindow();
+    }
+    // Contextual popup window management
+    createContextualPopupWindow(data, position) {
+        return this.windowHelper.createContextualPopupWindow(data, position);
+    }
+    closeContextualPopupWindow() {
+        this.windowHelper.closeContextualPopupWindow();
+    }
+    getContextualPopupWindow() {
+        return this.windowHelper.getContextualPopupWindow();
     }
     closeSelectionOverlayWindow() {
         this.windowHelper.closeSelectionOverlayWindow();

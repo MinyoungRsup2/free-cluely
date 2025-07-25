@@ -105,6 +105,16 @@ interface ElectronAPI {
 
   // Analysis result events
   onLensAnalysisResult: (callback: (data: any) => void) => () => void
+  
+  // Contextual popup methods
+  createContextualPopup: (data: any, position: { x: number, y: number }) => Promise<{ success: boolean; windowId?: number; error?: string }>
+  closeContextualPopup: () => Promise<{ success: boolean; error?: string }>
+  sendContextualPopupAction: (action: string) => void
+  sendContextualPopupClose: () => void
+  onContextualPopupData: (callback: (data: any) => void) => () => void
+  onContextualPopupAction: (callback: (action: string) => void) => () => void
+  onContextualPopupOpened: (callback: () => void) => () => void
+  onContextualPopupClosed: (callback: () => void) => () => void
 }
 
 export const PROCESSING_EVENTS = {
@@ -392,6 +402,44 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("lens-analysis-error", subscription)
     return () => {
       ipcRenderer.removeListener("lens-analysis-error", subscription)
+    }
+  },
+
+  // Contextual popup methods
+  createContextualPopup: (data: any, position: { x: number, y: number }) => 
+    ipcRenderer.invoke("create-contextual-popup", { data, position }),
+  closeContextualPopup: () => 
+    ipcRenderer.invoke("close-contextual-popup"),
+  sendContextualPopupAction: (action: string) => 
+    ipcRenderer.send("contextual-popup-action", action),
+  sendContextualPopupClose: () => 
+    ipcRenderer.send("contextual-popup-close"),
+  onContextualPopupData: (callback: (data: any) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("contextual-popup-data", subscription)
+    return () => {
+      ipcRenderer.removeListener("contextual-popup-data", subscription)
+    }
+  },
+  onContextualPopupAction: (callback: (action: string) => void) => {
+    const subscription = (_: any, action: string) => callback(action)
+    ipcRenderer.on("contextual-popup-action", subscription)
+    return () => {
+      ipcRenderer.removeListener("contextual-popup-action", subscription)
+    }
+  },
+  onContextualPopupOpened: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("contextual-popup-opened", subscription)
+    return () => {
+      ipcRenderer.removeListener("contextual-popup-opened", subscription)
+    }
+  },
+  onContextualPopupClosed: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("contextual-popup-closed", subscription)
+    return () => {
+      ipcRenderer.removeListener("contextual-popup-closed", subscription)
     }
   }
 } as ElectronAPI)

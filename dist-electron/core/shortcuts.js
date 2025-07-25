@@ -3,11 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShortcutsHelper = void 0;
 const electron_1 = require("electron");
 const LensHelper_1 = require("../lens/LensHelper");
+const gql_electron_1 = require("../gql-electron");
 class ShortcutsHelper {
     appState;
     lensOperations;
     lensActivation;
     isEKeyPressed = false;
+    eKeyPressTimer = null;
     constructor(appState) {
         this.appState = appState;
         // Initialize lens operations with dependencies
@@ -129,11 +131,15 @@ class ShortcutsHelper {
         }
         this.isEKeyPressed = true;
         try {
-            console.log('🎯 E key pressed - starting selection mode');
+            console.log('🎯 E key pressed - enabling overlay interaction and starting selection mode');
+            // Enable overlay interaction when key is pressed
+            this.appState.enableOverlayInteraction();
             // Get main window and send selection activation event
             const mainWindow = this.appState.getMainWindow();
             if (!mainWindow || mainWindow.isDestroyed()) {
                 console.error('❌ Main window not available');
+                this.appState.disableOverlayInteraction(); // Clean up on error
+                this.isEKeyPressed = false;
                 return;
             }
             // Send selection activation to main window
@@ -150,19 +156,38 @@ class ShortcutsHelper {
                         mainWindow.webContents.send('lens-analysis-error', result.error.message);
                         return;
                     }
+                    console.log('✅ result:', JSON.stringify(result, null, 4));
                     const analysisResult = result.value;
                     console.log('✅ Focused analysis completed:', analysisResult.element.type);
-                    // Send analysis results back to main window
-                    mainWindow.webContents.send('lens-analysis-result', analysisResult);
+                    const [firstname, lastname] = analysisResult.element.detected_structure.patient_name.text.split(' ');
+                    const consumer = await (0, gql_electron_1.findConsumerByName)(firstname, lastname);
+                    const boughtTreatments = await (0, gql_electron_1.findBoughtTreatmentByConsumerId)(consumer.findFirstConsumer.id);
+                    // Create contextual popup window with analysis results
+                    const popupData = { ...analysisResult, metadata: { consumer, boughtTreatments } };
+                    // Calculate position based on the selection rectangle
+                    const popupPosition = {
+                        x: rectangle.x + rectangle.width + 10, // Position to the right of the selection
+                        y: rectangle.y + rectangle.height / 2 // Center vertically on the selection
+                    };
+                    this.appState.createContextualPopupWindow(popupData, popupPosition);
+                    // Notify main window that analysis is complete and popup is shown
+                    mainWindow.webContents.send('contextual-popup-opened');
                 }
                 catch (error) {
                     console.error('💥 Error processing selection:', error);
                     mainWindow.webContents.send('lens-analysis-error', error.message);
                 }
+                finally {
+                    // Always disable overlay interaction after selection completes
+                    this.appState.disableOverlayInteraction();
+                    this.isEKeyPressed = false;
+                }
             };
             const handleSelectionCancel = () => {
-                console.log('❌ Selection cancelled');
-                // Nothing special needed - main window will handle UI state
+                console.log('❌ Selection cancelled - disabling overlay interaction');
+                // Disable overlay interaction when selection is cancelled
+                this.appState.disableOverlayInteraction();
+                this.isEKeyPressed = false;
             };
             // Set up IPC listeners (temporarily)
             const { ipcMain } = require('electron');
@@ -171,10 +196,18 @@ class ShortcutsHelper {
         }
         catch (error) {
             console.error('💥 Unexpected error in E key handler:', error);
-        }
-        finally {
+            this.appState.disableOverlayInteraction(); // Clean up on error
             this.isEKeyPressed = false;
         }
+    }
+    // Clean up method
+    cleanup() {
+        if (this.eKeyPressTimer) {
+            clearTimeout(this.eKeyPressTimer);
+            this.eKeyPressTimer = null;
+        }
+        this.isEKeyPressed = false;
+        this.appState.disableOverlayInteraction();
     }
 }
 exports.ShortcutsHelper = ShortcutsHelper;

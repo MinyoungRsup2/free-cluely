@@ -82,6 +82,16 @@ export interface ElectronAPI {
 
   // Overlay window resizing
   resizeOverlayWindow: (dimensions: { elementId?: string; width: number; height: number }) => Promise<{ success: boolean; error?: string }>
+  
+  // Contextual popup methods
+  createContextualPopup: (data: any, position: { x: number, y: number }) => Promise<{ success: boolean; windowId?: number; error?: string }>
+  closeContextualPopup: () => Promise<{ success: boolean; error?: string }>
+  sendContextualPopupAction: (action: string) => void
+  sendContextualPopupClose: () => void
+  onContextualPopupData: (callback: (data: any) => void) => () => void
+  onContextualPopupAction: (callback: (action: string) => void) => () => void
+  onContextualPopupOpened: (callback: () => void) => () => void
+  onContextualPopupClosed: (callback: () => void) => () => void
 }
 
 declare global {

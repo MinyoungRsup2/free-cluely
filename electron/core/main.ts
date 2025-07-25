@@ -227,6 +227,15 @@ export class AppState {
     this.windowHelper.toggleClickMode()
   }
 
+  // E key interaction control methods
+  public enableOverlayInteraction(): void {
+    this.windowHelper.enableOverlayInteraction()
+  }
+
+  public disableOverlayInteraction(): void {
+    this.windowHelper.disableOverlayInteraction()
+  }
+
   // Element overlay window management
   public createElementOverlayWindow(elementId: string, bounds: {x: number, y: number, width: number, height: number}): Electron.BrowserWindow {
     return this.windowHelper.createElementOverlayWindow(elementId, bounds)
@@ -251,6 +260,17 @@ export class AppState {
 
   public getSelectionOverlayWindow(): Electron.BrowserWindow | null {
     return this.windowHelper.getSelectionOverlayWindow()
+  }
+  
+  // Contextual popup window management
+  public createContextualPopupWindow(data: any, position: { x: number, y: number }): Electron.BrowserWindow | null {
+    return this.windowHelper.createContextualPopupWindow(data, position)
+  }
+  public closeContextualPopupWindow(): void {
+    this.windowHelper.closeContextualPopupWindow()
+  }
+  public getContextualPopupWindow(): Electron.BrowserWindow | null {
+    return this.windowHelper.getContextualPopupWindow()
   }
 
   public closeSelectionOverlayWindow(): void {

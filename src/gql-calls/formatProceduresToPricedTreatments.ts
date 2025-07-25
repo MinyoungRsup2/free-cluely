@@ -1,4 +1,6 @@
 
+import { v4 as uuidv4 } from "uuid";
+
 export enum EncounterSourceEnum {
   AleService = "ale_service",
   Kiosk = "kiosk",
@@ -38,14 +40,7 @@ export const formatProcedureToPricedTreatment = (
   slotId?: string | undefined,
   adminEmail?: string,
 ) => {
-  const mapId = procedure.boughtTreatmentId
-    ? procedure.boughtTreatmentId
-    : (procedure.clientSideProcedureId as string);
 
-  // TODO: we can just pass price object here.  we already calculate the price
-  // object in parent functions and we're just redoing it here
-  const priceObject =
-    priceMap.get(mapId)[priceMode] ?? priceMap.get(mapId).SELFPAY;
 
   return {
     data: {
@@ -55,8 +50,8 @@ export const formatProcedureToPricedTreatment = (
       isVirtual: false,
       consumerId: consumerInfo.id,
       orgId: orgId,
-      price: priceObject.price,
-      pricedTreatmentId: priceObject.pricedTreatmentId,
+      price: 100,
+      pricedTreatmentId:  uuidv4(),
       paymentType: procedure.selectedPaymentType,
       source: EncounterSourceEnum.Pc,
       lastUpdatedBy: adminEmail || "",

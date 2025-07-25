@@ -251,5 +251,43 @@ function initializeIpcHandlers(appState) {
             return { success: false, error: error.message };
         }
     });
+    // Contextual popup handlers
+    electron_1.ipcMain.handle("create-contextual-popup", async (event, { data, position }) => {
+        try {
+            console.log("🗨️ Creating contextual popup window");
+            const popupWindow = appState.createContextualPopupWindow(data, position);
+            return { success: true, windowId: popupWindow?.id };
+        }
+        catch (error) {
+            console.error("Error creating contextual popup:", error);
+            return { success: false, error: error.message };
+        }
+    });
+    electron_1.ipcMain.handle("close-contextual-popup", async () => {
+        try {
+            console.log("🗑️ Closing contextual popup window");
+            appState.closeContextualPopupWindow();
+            return { success: true };
+        }
+        catch (error) {
+            console.error("Error closing contextual popup:", error);
+            return { success: false, error: error.message };
+        }
+    });
+    // Handle actions from contextual popup
+    electron_1.ipcMain.on("contextual-popup-action", (event, action) => {
+        console.log("🎯 Received action from contextual popup:", action);
+        // Forward the action to all windows
+        electron_1.BrowserWindow.getAllWindows().forEach(window => {
+            if (!window.isDestroyed() && window.webContents !== event.sender) {
+                window.webContents.send("contextual-popup-action", action);
+            }
+        });
+    });
+    // Handle contextual popup close event
+    electron_1.ipcMain.on("contextual-popup-close", () => {
+        console.log("❌ Contextual popup requested close");
+        appState.closeContextualPopupWindow();
+    });
 }
 //# sourceMappingURL=ipcHandlers.js.map

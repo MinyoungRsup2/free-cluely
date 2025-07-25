@@ -206,10 +206,7 @@ export const parseWithWarnings = {
     data?: z.infer<typeof FocusedElementResponseSchema>;
     warnings: string[]
   } => {
-    console.log("🔍 Parsing focused element response:", data)
     const result = FocusedElementResponseSchema.safeParse(data)
-
-    console.log("FocusedElementResponseSchema result:", result)
     const warnings: string[] = []
     
     if (!result.success) {

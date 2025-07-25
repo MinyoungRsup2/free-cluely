@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { SelectionOverlay } from "./components/SelectionOverlay"
 import { ContextualPopup } from "./components/ContextualPopup"
+import { ContextualPopupWindow } from "./components/ContextualPopupWindow"
 
 declare global {
   interface Window {
@@ -106,12 +107,30 @@ declare global {
       testToggleClickMode: () => Promise<{ success: boolean; error?: string }>
       testCreateOverlayWindows: () => Promise<{ success: boolean; elements?: any[]; error?: string }>
       testCloseOverlayWindows: () => Promise<{ success: boolean; error?: string }>
+      
+      // Contextual popup methods
+      createContextualPopup: (data: any, position: { x: number, y: number }) => Promise<{ success: boolean; windowId?: number; error?: string }>
+      closeContextualPopup: () => Promise<{ success: boolean; error?: string }>
+      sendContextualPopupAction: (action: string) => void
+      sendContextualPopupClose: () => void
+      onContextualPopupData: (callback: (data: any) => void) => () => void
+      onContextualPopupAction: (callback: (action: string) => void) => () => void
+      onContextualPopupOpened: (callback: () => void) => () => void
+      onContextualPopupClosed: (callback: () => void) => () => void
     }
   }
 }
 
 
 const App: React.FC = () => {
+  // Check if we're running as a contextual popup window
+  const isContextualPopupMode = window.location.hash === '#/contextual-popup'
+  
+  // If we're in popup mode, render the popup window component
+  if (isContextualPopupMode) {
+    return <ContextualPopupWindow />
+  }
+  
   // Binary state system: either showing selection overlay or popup with results
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<any>(null)
@@ -141,11 +160,28 @@ const App: React.FC = () => {
       setIsLoading(false)
       // Could show error message to user here if needed
     }) || (() => {})
+    
+    // Listen for contextual popup opened (stop loading)
+    const unsubscribePopupOpened = window.electronAPI.onContextualPopupOpened(() => {
+      console.log('🗨️ Contextual popup opened')
+      setIsLoading(false)
+      setIsSelectionMode(false)
+    })
+    
+    // Listen for contextual popup closed (reset state)
+    const unsubscribePopupClosed = window.electronAPI.onContextualPopupClosed(() => {
+      console.log('🗑️ Contextual popup closed')
+      setIsLoading(false)
+      setIsSelectionMode(false)
+      setAnalysisResult(null)
+    })
 
     return () => {
       unsubscribeSelection()
       unsubscribeResults()
       unsubscribeErrors()
+      unsubscribePopupOpened()
+      unsubscribePopupClosed()
     }
   }, [])
 
@@ -185,26 +221,14 @@ const App: React.FC = () => {
     setAnalysisResult(null) // Close popup after action
   }
 
-  // Binary state rendering
-  if (isSelectionMode) {
+  // Show selection overlay (with analyzing state if loading)
+  if (isSelectionMode || isLoading) {
     return (
       <SelectionOverlay 
         onSelectionComplete={handleSelectionComplete}
         onCancel={handleSelectionCancel}
+        isAnalyzing={isLoading}
       />
-    )
-  }
-
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div className="bg-white rounded-lg p-6 shadow-xl">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            <span className="text-gray-700">Analyzing selection...</span>
-          </div>
-        </div>
-      </div>
     )
   }
 

@@ -266,4 +266,44 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: error.message }
     }
   })
+
+  // Contextual popup handlers
+  ipcMain.handle("create-contextual-popup", async (event, { data, position }: { data: any, position: { x: number, y: number } }) => {
+    try {
+      console.log("🗨️ Creating contextual popup window")
+      const popupWindow = appState.createContextualPopupWindow(data, position)
+      return { success: true, windowId: popupWindow?.id }
+    } catch (error: any) {
+      console.error("Error creating contextual popup:", error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle("close-contextual-popup", async () => {
+    try {
+      console.log("🗑️ Closing contextual popup window")
+      appState.closeContextualPopupWindow()
+      return { success: true }
+    } catch (error: any) {
+      console.error("Error closing contextual popup:", error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Handle actions from contextual popup
+  ipcMain.on("contextual-popup-action", (event, action: string) => {
+    console.log("🎯 Received action from contextual popup:", action)
+    // Forward the action to all windows
+    BrowserWindow.getAllWindows().forEach(window => {
+      if (!window.isDestroyed() && window.webContents !== event.sender) {
+        window.webContents.send("contextual-popup-action", action)
+      }
+    })
+  })
+
+  // Handle contextual popup close event
+  ipcMain.on("contextual-popup-close", () => {
+    console.log("❌ Contextual popup requested close")
+    appState.closeContextualPopupWindow()
+  })
 }

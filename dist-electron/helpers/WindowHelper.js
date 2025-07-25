@@ -8,13 +8,14 @@ const electron_1 = require("electron");
 const node_path_1 = __importDefault(require("node:path"));
 const isDev = process.env.NODE_ENV === "development";
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? "http://localhost:5173"
     : `file://${node_path_1.default.join(__dirname, "../dist/index.html")}`;
 class WindowHelper {
     mainWindow = null;
     overlayWindow = null;
     elementOverlayWindows = new Map();
     selectionOverlayWindow = null;
+    contextualPopupWindow = null;
     isWindowVisible = false;
     windowPosition = null;
     windowSize = null;
@@ -92,7 +93,8 @@ class WindowHelper {
         // this.mainWindow.webContents.openDevTools()
         this.mainWindow.setContentProtection(true);
         // Start with pass-through mode - clicks go to underlying applications
-        this.mainWindow.setIgnoreMouseEvents(false);
+        // Only capture mouse events when E key is held down
+        this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
         if (process.platform === "darwin") {
             this.mainWindow.setVisibleOnAllWorkspaces(true, {
                 visibleOnFullScreen: true
@@ -338,6 +340,19 @@ class WindowHelper {
             this.enableClickCapture();
         }
     }
+    // New methods to control overlay interaction based on E key state
+    enableOverlayInteraction() {
+        if (!this.mainWindow || this.mainWindow.isDestroyed())
+            return;
+        console.log("🎯 Enabling overlay interaction - E key held down");
+        this.mainWindow.setIgnoreMouseEvents(false);
+    }
+    disableOverlayInteraction() {
+        if (!this.mainWindow || this.mainWindow.isDestroyed())
+            return;
+        console.log("👻 Disabling overlay interaction - E key released");
+        this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
     // Element overlay window management - one window per lens element
     createElementOverlayWindow(elementId, bounds) {
         // Close existing window for this element if it exists
@@ -524,6 +539,97 @@ class WindowHelper {
             popupWindow.setAlwaysOnTop(true, "floating");
         }
         return popupWindow;
+    }
+    // Contextual popup window management
+    createContextualPopupWindow(data, position) {
+        // Close existing popup if it exists
+        if (this.contextualPopupWindow && !this.contextualPopupWindow.isDestroyed()) {
+            this.contextualPopupWindow.close();
+            this.contextualPopupWindow = null;
+        }
+        const popupWidth = 380;
+        const popupHeight = 500;
+        const padding = 10;
+        // Get screen dimensions
+        const primaryDisplay = electron_1.screen.getPrimaryDisplay();
+        const workArea = primaryDisplay.workAreaSize;
+        // Calculate position - try to place it on the right side of the position
+        let popupX = position.x + padding;
+        let popupY = position.y - popupHeight / 2;
+        // Ensure popup stays within screen bounds
+        if (popupX + popupWidth > workArea.width) {
+            // If it would go off the right edge, place it to the left of the position
+            popupX = position.x - popupWidth - padding;
+        }
+        // Ensure it doesn't go off the top or bottom
+        popupY = Math.max(0, Math.min(popupY, workArea.height - popupHeight));
+        console.log(`🗨️ Creating contextual popup at (${popupX}, ${popupY})`);
+        const popupSettings = {
+            width: popupWidth,
+            height: popupHeight,
+            x: popupX,
+            y: popupY,
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: true,
+                preload: node_path_1.default.join(__dirname, "../core/preload.js"),
+                additionalArguments: [`--popup-data=${JSON.stringify(data)}`]
+            },
+            show: false, // Start hidden, show after loading
+            alwaysOnTop: true,
+            frame: false,
+            resizable: false,
+            fullscreenable: false,
+            hasShadow: true,
+            backgroundColor: "#00000000", // Transparent background for glassmorphic effect
+            transparent: true,
+            focusable: true, // Allow interactions
+            skipTaskbar: true,
+            roundedCorners: true,
+            vibrancy: 'under-window' // macOS vibrancy effect
+        };
+        this.contextualPopupWindow = new electron_1.BrowserWindow(popupSettings);
+        // Ensure clicks don't pass through
+        this.contextualPopupWindow.setIgnoreMouseEvents(false);
+        // Load a specific URL for the popup
+        const popupUrl = isDev
+            ? "http://localhost:5173/#/contextual-popup"
+            : `file://${node_path_1.default.join(__dirname, "../dist/index.html#/contextual-popup")}`;
+        this.contextualPopupWindow.loadURL(popupUrl).then(() => {
+            // Send the data to the popup window after it loads
+            if (this.contextualPopupWindow && !this.contextualPopupWindow.isDestroyed()) {
+                this.contextualPopupWindow.webContents.send('contextual-popup-data', data);
+                this.contextualPopupWindow.show();
+                this.contextualPopupWindow.focus();
+            }
+        }).catch((err) => {
+            console.error("Failed to load popup URL:", err);
+        });
+        if (process.platform === "darwin") {
+            this.contextualPopupWindow.setVisibleOnAllWorkspaces(true, {
+                visibleOnFullScreen: true
+            });
+            this.contextualPopupWindow.setAlwaysOnTop(true, "floating");
+        }
+        // Handle window closed
+        this.contextualPopupWindow.on("closed", () => {
+            console.log("🗑️ Contextual popup window closed");
+            this.contextualPopupWindow = null;
+            // Notify main window that popup is closed
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.webContents.send('contextual-popup-closed');
+            }
+        });
+        return this.contextualPopupWindow;
+    }
+    closeContextualPopupWindow() {
+        if (this.contextualPopupWindow && !this.contextualPopupWindow.isDestroyed()) {
+            this.contextualPopupWindow.close();
+            this.contextualPopupWindow = null;
+        }
+    }
+    getContextualPopupWindow() {
+        return this.contextualPopupWindow;
     }
 }
 exports.WindowHelper = WindowHelper;

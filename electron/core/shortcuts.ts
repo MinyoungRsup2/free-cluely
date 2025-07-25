@@ -1,13 +1,14 @@
 import { globalShortcut, app } from "electron"
 import { AppState } from "./main" // Adjust the import path if necessary
 import { createLensOperations, createLensActivation, type LensDependencies } from "../lens/LensHelper"
-import { useLensStore } from "../lens/LensStore"
+import { findBoughtTreatmentByConsumerId, findConsumerByName } from "../gql-electron"
 
 export class ShortcutsHelper {
   private appState: AppState
   private lensOperations: ReturnType<typeof createLensOperations>
   private lensActivation: ReturnType<typeof createLensActivation>
   private isEKeyPressed = false
+  private eKeyPressTimer: NodeJS.Timeout | null = null
 
   constructor(appState: AppState) {
     this.appState = appState
@@ -142,12 +143,17 @@ export class ShortcutsHelper {
     this.isEKeyPressed = true
     
     try {
-      console.log('🎯 E key pressed - starting selection mode')
+      console.log('🎯 E key pressed - enabling overlay interaction and starting selection mode')
+      
+      // Enable overlay interaction when key is pressed
+      this.appState.enableOverlayInteraction()
       
       // Get main window and send selection activation event
       const mainWindow = this.appState.getMainWindow()
       if (!mainWindow || mainWindow.isDestroyed()) {
         console.error('❌ Main window not available')
+        this.appState.disableOverlayInteraction() // Clean up on error
+        this.isEKeyPressed = false
         return
       }
 
@@ -171,22 +177,46 @@ export class ShortcutsHelper {
             mainWindow.webContents.send('lens-analysis-error', result.error.message)
             return
           }
-          
+
+          console.log('✅ result:', JSON.stringify(result, null, 4))
+
           const analysisResult = result.value
           console.log('✅ Focused analysis completed:', analysisResult.element.type)
+
+          const[ firstname, lastname ] = analysisResult.element.detected_structure.patient_name.text.split(' ')
+
+          const consumer = await findConsumerByName(firstname, lastname)
+          const boughtTreatments = await findBoughtTreatmentByConsumerId(consumer.findFirstConsumer.id)
+
+          // Create contextual popup window with analysis results
+          const popupData = {...analysisResult, metadata : { consumer, boughtTreatments }}
           
-          // Send analysis results back to main window
-          mainWindow.webContents.send('lens-analysis-result', analysisResult)
+          // Calculate position based on the selection rectangle
+          const popupPosition = {
+            x: rectangle.x + rectangle.width + 10, // Position to the right of the selection
+            y: rectangle.y + rectangle.height / 2  // Center vertically on the selection
+          }
+          
+          this.appState.createContextualPopupWindow(popupData, popupPosition)
+          
+          // Notify main window that analysis is complete and popup is shown
+          mainWindow.webContents.send('contextual-popup-opened')
           
         } catch (error) {
           console.error('💥 Error processing selection:', error)
           mainWindow.webContents.send('lens-analysis-error', error.message)
+        } finally {
+          // Always disable overlay interaction after selection completes
+          this.appState.disableOverlayInteraction()
+          this.isEKeyPressed = false
         }
       }
 
       const handleSelectionCancel = () => {
-        console.log('❌ Selection cancelled')
-        // Nothing special needed - main window will handle UI state
+        console.log('❌ Selection cancelled - disabling overlay interaction')
+        // Disable overlay interaction when selection is cancelled
+        this.appState.disableOverlayInteraction()
+        this.isEKeyPressed = false
       }
 
       // Set up IPC listeners (temporarily)
@@ -196,9 +226,18 @@ export class ShortcutsHelper {
 
     } catch (error) {
       console.error('💥 Unexpected error in E key handler:', error)
-    } finally {
+      this.appState.disableOverlayInteraction() // Clean up on error
       this.isEKeyPressed = false
     }
   }
 
+  // Clean up method
+  public cleanup(): void {
+    if (this.eKeyPressTimer) {
+      clearTimeout(this.eKeyPressTimer)
+      this.eKeyPressTimer = null
+    }
+    this.isEKeyPressed = false
+    this.appState.disableOverlayInteraction()
+  }
 }

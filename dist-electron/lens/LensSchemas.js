@@ -169,9 +169,7 @@ exports.parseWithWarnings = {
         return { success: true, data: result.data, warnings };
     },
     focusedElement: (data) => {
-        console.log("🔍 Parsing focused element response:", data);
         const result = exports.FocusedElementResponseSchema.safeParse(data);
-        console.log("FocusedElementResponseSchema result:", result);
         const warnings = [];
         if (!result.success) {
             warnings.push(`Focused element parsing failed: ${result.error.message}`);

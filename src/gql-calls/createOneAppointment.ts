@@ -69,7 +69,6 @@ export const formatSlotToGraphqlInput = (
 export const createOneAppointment = async (
   appointment: any,
   slots: any,
-  priceMap: any,
   consumerInfo: any,
   orgId: number
 ): Promise<any> => {
@@ -113,7 +112,7 @@ export const createOneAppointment = async (
         const pricedTreatment = formatProcedureToPricedTreatment(
           procedure,
           procedure.selectedPaymentType as PaymentTypeEnum,
-          priceMap,
+          null,
           consumerInfo,
           orgId,
           [],
