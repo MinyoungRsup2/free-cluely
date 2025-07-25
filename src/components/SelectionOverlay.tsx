@@ -1,91 +1,4 @@
 import React, { useState, useRef, useCallback } from 'react'
-import { Canvas, useFrame, extend } from '@react-three/fiber'
-import { shaderMaterial } from '@react-three/drei'
-
-/* ------------------------------------------------------------------ */
-/* 1. Custom shader material                                           */
-/* ------------------------------------------------------------------ */
-
-const GlassMaterial = shaderMaterial(
-  // uniforms
-  {
-    uTime: 0,
-    uOpacity: 0.15,
-    uColor: [0.8, 0.9, 1.0],
-  },
-  // vertex shader
-  `
-    #include <common>
-    
-    varying vec2 vUv;
-    
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  // fragment shader
-  `
-    #include <common>
-    
-    uniform float uTime;
-    uniform float uOpacity;
-    uniform vec3 uColor;
-
-    varying vec2 vUv;
-
-    float noise(vec2 st) {
-      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
-    }
-
-    void main() {
-      vec2 uv = vUv;
-      
-      float time = uTime * 0.2;
-      float n1 = noise(uv * 8.0 + time);
-      float n2 = noise(uv * 16.0 - time * 0.5);
-      float distortion = (n1 + n2 * 0.5) * 0.02;
-      
-      vec2 center = uv - 0.5;
-      float dist = length(center);
-      float edge = smoothstep(0.0, 0.5, dist);
-      
-      vec3 color = mix(uColor, vec3(1.0), edge * 0.3);
-      float alpha = uOpacity + edge * 0.1 + distortion;
-      
-      gl_FragColor = vec4(color, alpha);
-    }
-  `
-)
-
-extend({ GlassMaterial })
-
-/* ------------------------------------------------------------------ */
-/* 2. Full-screen quad that uses the material                          */
-/* ------------------------------------------------------------------ */
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements { glassMaterial: any }
-  }
-}
-
-function ScreenQuad() {
-  const ref = useRef<any>()
-  useFrame(({ clock }) => {
-    if (ref.current) ref.current.uTime = clock.getElapsedTime()
-  })
-  return (
-    <mesh>
-      <planeGeometry args={[2, 2]} />
-      <glassMaterial ref={ref} transparent depthWrite={false} />
-    </mesh>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* 3. Original overlay unchanged except for the <Canvas> addition      */
-/* ------------------------------------------------------------------ */
 
 interface Rectangle {
   x: number
@@ -174,12 +87,9 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
         onMouseUp={isAnalyzing ? undefined : handleMouseUp}
       >
         {/* instructions or analyzing state */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/75 text-white px-4 py-2 rounded-lg text-sm">
+        <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm transition-opacity duration-300 ${isAnalyzing ? 'bg-black/40 text-white/60 opacity-50' : 'bg-black/75 text-white'}`}>
           {isAnalyzing ? (
-            <div className="flex items-center space-x-3">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>Analyzing selection...</span>
-            </div>
+            <span>Processing...</span>
           ) : (
             'Hold E and drag to select an area • Press Escape to cancel'
           )}
@@ -188,7 +98,7 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
         {/* selection rectangle with glass effect */}
         {currentRect && (
           <div
-            className={`absolute border-2 ${isAnalyzing ? 'border-blue-400 animate-pulse' : 'border-blue-500'}`}
+            className={`absolute border-2 ${isAnalyzing ? 'border-blue-400 animate-pulse' : 'border-blue-500'} ${isAnalyzing ? 'backdrop-blur-md' : ''}`}
             style={{
               left: currentRect.x,
               top: currentRect.y,
@@ -196,14 +106,49 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
               height: currentRect.height,
               pointerEvents: 'none',
               overflow: 'hidden',
+              borderRadius: isAnalyzing ? '16px' : '0px',
+              background: isAnalyzing 
+                ? 'linear-gradient(0deg, rgba(245, 245, 245, 0.15) 0%, rgba(245, 245, 245, 0.15) 100%), rgba(15, 15, 15, 0.3)'
+                : 'transparent',
+              backgroundBlendMode: isAnalyzing ? 'normal, color-dodge' : 'normal',
+              boxShadow: isAnalyzing ? '0 8px 32px rgba(31, 38, 135, 0.2)' : 'none',
+              transition: 'all 0.3s ease-in-out'
             }}
           >
+            {/* Glassmorphic content when analyzing */}
+            {isAnalyzing && (
+              <div className="absolute inset-0 p-2 flex flex-col items-center justify-center">
+                {/* Always show loading spinner */}
+                <div className="flex items-center space-x-2 text-white/90 text-xs">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white/70"></div>
+                  <span>Analyzing...</span>
+                </div>
+
+                {/* Subtle animated shimmer effect */}
+                <div className="absolute inset-0 overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse opacity-30"></div>
+                </div>
+
+                {/* Preview elements - only show if rectangle has sufficient space */}
+                {currentRect.width > 150 && currentRect.height > 80 && (
+                  <div className="mt-2 space-y-1 w-full px-2">
+                    <div className="h-1.5 bg-white/20 rounded-full animate-pulse"></div>
+                    <div className="h-1 bg-white/15 rounded-full animate-pulse delay-100"></div>
+                    <div className="h-1 bg-white/10 rounded-full animate-pulse delay-200 w-3/4"></div>
+                  </div>
+                )}
+              </div>
+            )}
           
-            {/* Corner handles */}
-            <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 border border-white z-10" />
-            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 border border-white z-10" />
-            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 border border-white z-10" />
-            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 border border-white z-10" />
+            {/* Corner handles - hide when analyzing */}
+            {!isAnalyzing && (
+              <>
+                <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 border border-white z-10" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 border border-white z-10" />
+                <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 border border-white z-10" />
+                <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 border border-white z-10" />
+              </>
+            )}
             
             {/* Size indicator - hide when analyzing */}
             {!isAnalyzing && (

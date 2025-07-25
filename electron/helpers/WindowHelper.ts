@@ -653,8 +653,11 @@ export class WindowHelper {
 
   // Contextual popup window management
   public createContextualPopupWindow(data: any, position: { x: number; y: number }): BrowserWindow | null {
+    console.log('🗨️ WindowHelper: createContextualPopupWindow called with data:', Object.keys(data), 'position:', position)
+    
     // Close existing popup if it exists
     if (this.contextualPopupWindow && !this.contextualPopupWindow.isDestroyed()) {
+      console.log('🗑️ Closing existing popup window')
       this.contextualPopupWindow.close()
       this.contextualPopupWindow = null
     }
@@ -708,24 +711,30 @@ export class WindowHelper {
     }
 
     this.contextualPopupWindow = new BrowserWindow(popupSettings)
+    console.log('🪟 Created new BrowserWindow for popup')
 
     // Ensure clicks don't pass through
     this.contextualPopupWindow.setIgnoreMouseEvents(false)
 
     // Load a specific URL for the popup
     const popupUrl = isDev
-      ? "http://localhost:5173/#/contextual-popup"
-      : `file://${path.join(__dirname, "../dist/index.html#/contextual-popup")}`
+      ? "http://localhost:5173/?mode=contextual-popup"
+      : `file://${path.join(__dirname, "../dist/index.html")}?mode=contextual-popup`
 
+    console.log('🔗 Loading popup URL:', popupUrl)
+    
     this.contextualPopupWindow.loadURL(popupUrl).then(() => {
+      console.log('✅ Popup URL loaded successfully')
       // Send the data to the popup window after it loads
       if (this.contextualPopupWindow && !this.contextualPopupWindow.isDestroyed()) {
+        console.log('📤 Sending contextual-popup-data to popup window')
         this.contextualPopupWindow.webContents.send('contextual-popup-data', data)
+        console.log('👁️ Showing and focusing popup window')
         this.contextualPopupWindow.show()
         this.contextualPopupWindow.focus()
       }
     }).catch((err) => {
-      console.error("Failed to load popup URL:", err)
+      console.error("❌ Failed to load popup URL:", err)
     })
 
     if (process.platform === "darwin") {

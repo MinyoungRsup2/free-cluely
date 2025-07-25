@@ -173,7 +173,7 @@ const TreatmentCard: React.FC<{ treatment: BoughtTreatment; collectPayment: (tre
             </div>
           </div>
 
-          <button onClick={() => collectPayment(treatment)}>Collect Payment</button>
+          <button className='bg-blue-500 text-white px-4 py-2 rounded' onClick={() => collectPayment(treatment)}>Collect Payment</button>
         </div>
       )}
     </div>
@@ -390,23 +390,7 @@ export const ContextualPopup: React.FC<ContextualPopupProps> = ({
           </div>
         )}
         
-        {/* Original detected structure */}
-        {Object.keys(element.detected_structure).length > 0 && (
-          <div>
-            <span className="text-sm font-medium text-white/90 block mb-2">Detected Information</span>
-            <div className="bg-white/10 p-3 rounded-lg border border-white/20 backdrop-blur-sm">
-              {Object.entries(element.detected_structure).map(([key, value]) => (
-                <div key={key} className="mb-2 last:mb-0">
-                  <div className="text-sm font-medium text-white/90">{value.text}</div>
-                  <div className="text-xs text-white/60">Confidence: {Math.round(value.confidence * 100)}%</div>
-                  {value.position_found && (
-                    <div className="text-xs text-white/50">Position: {value.position_found}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      
         {/* Context Information */}
         <div>
           <span className="text-sm font-medium text-white/90 block mb-2">Context</span>

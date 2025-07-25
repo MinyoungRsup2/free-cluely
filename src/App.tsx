@@ -124,7 +124,8 @@ declare global {
 
 const App: React.FC = () => {
   // Check if we're running as a contextual popup window
-  const isContextualPopupMode = window.location.hash === '#/contextual-popup'
+  const urlParams = new URLSearchParams(window.location.search)
+  const isContextualPopupMode = urlParams.get('mode') === 'contextual-popup'
   
   // If we're in popup mode, render the popup window component
   if (isContextualPopupMode) {
@@ -232,16 +233,7 @@ const App: React.FC = () => {
     )
   }
 
-  if (analysisResult) {
-    return (
-      <ContextualPopup
-        data={analysisResult}
-        onClose={handlePopupClose}
-        onActionClick={handleActionClick}
-        position={{ x: 0, y: 0 }} // Position handled by centering
-      />
-    )
-  }
+  // Note: analysisResult is no longer used since popup is now a separate window
 
   // Default idle state - minimal UI
   return (

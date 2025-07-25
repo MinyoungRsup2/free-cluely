@@ -182,11 +182,24 @@ export class ShortcutsHelper {
 
           const analysisResult = result.value
           console.log('✅ Focused analysis completed:', analysisResult.element.type)
+          console.log('🔍 Analysis result structure:', JSON.stringify(analysisResult, null, 2))
 
-          const[ firstname, lastname ] = analysisResult.element.detected_structure.patient_name.text.split(' ')
+          // Check if patient_name exists in detected_structure
+          const patientNameData = analysisResult.element.detected_structure?.patient_name
+          if (!patientNameData || !patientNameData.text) {
+            console.error('❌ No patient name found in analysis result')
+            mainWindow.webContents.send('lens-analysis-error', 'No patient name detected in selection')
+            return
+          }
+
+          const[ firstname, lastname ] = patientNameData.text.split(' ')
+          console.log('👤 Looking up patient:', firstname, lastname)
 
           const consumer = await findConsumerByName(firstname, lastname)
+          console.log('👤 Consumer found:', consumer)
+          
           const boughtTreatments = await findBoughtTreatmentByConsumerId(consumer.findFirstConsumer.id)
+          console.log('💊 Treatments found:', boughtTreatments)
 
           // Create contextual popup window with analysis results
           const popupData = {...analysisResult, metadata : { consumer, boughtTreatments }}
@@ -197,9 +210,11 @@ export class ShortcutsHelper {
             y: rectangle.y + rectangle.height / 2  // Center vertically on the selection
           }
           
+          console.log('🗨️ Creating contextual popup at position:', popupPosition)
           this.appState.createContextualPopupWindow(popupData, popupPosition)
           
           // Notify main window that analysis is complete and popup is shown
+          console.log('📤 Sending contextual-popup-opened event')
           mainWindow.webContents.send('contextual-popup-opened')
           
         } catch (error) {
