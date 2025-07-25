@@ -11,6 +11,9 @@ const startUrl = isDev
 
 export class WindowHelper {
   private mainWindow: BrowserWindow | null = null
+  private overlayWindow: BrowserWindow | null = null
+  private elementOverlayWindows: Map<string, BrowserWindow> = new Map()
+  private selectionOverlayWindow: BrowserWindow | null = null
   private isWindowVisible: boolean = false
   private windowPosition: { x: number; y: number } | null = null
   private windowSize: { width: number; height: number } | null = null
@@ -72,14 +75,16 @@ export class WindowHelper {
     this.screenWidth = workArea.width
     this.screenHeight = workArea.height
 
+
     this.step = Math.floor(this.screenWidth / 10) // 10 steps
     this.currentX = 0 // Start at the left
 
     const windowSettings: Electron.BrowserWindowConstructorOptions = {
-      height: 600,
-      minWidth: undefined,
-      maxWidth: undefined,
-      x: this.currentX,
+      height: workArea.height,
+      width: workArea.width,
+      minWidth: workArea.width,
+      minHeight: workArea.height,
+      x: 0,
       y: 0,
       webPreferences: {
         nodeIntegration: true,
@@ -88,17 +93,22 @@ export class WindowHelper {
       },
       show: true,
       alwaysOnTop: true,
-      frame: false,
       transparent: true,
+      frame: false,
+      resizable: false,
       fullscreenable: false,
       hasShadow: false,
       backgroundColor: "#00000000", // Fully transparent background
-      focusable: true
+      focusable: true, // Don't steal focus from underlying apps
+      skipTaskbar: true
     }
 
     this.mainWindow = new BrowserWindow(windowSettings)
     // this.mainWindow.webContents.openDevTools()
     this.mainWindow.setContentProtection(true)
+
+    // Start with pass-through mode - clicks go to underlying applications
+    this.mainWindow.setIgnoreMouseEvents(false)
 
     if (process.platform === "darwin") {
       this.mainWindow.setVisibleOnAllWorkspaces(true, {
@@ -280,5 +290,349 @@ export class WindowHelper {
       Math.round(this.currentX),
       Math.round(this.currentY)
     )
+  }
+
+  public createOverlayWindow(): BrowserWindow | null {
+    if (this.overlayWindow !== null) {
+      return this.overlayWindow
+    }
+
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workAreaSize
+
+    const overlaySettings: Electron.BrowserWindowConstructorOptions = {
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, "../core/preload.js")
+      },
+      show: false,
+      alwaysOnTop: true,
+      transparent: true,
+      frame: false,
+      resizable: false,
+      fullscreenable: false,
+      hasShadow: false,
+      backgroundColor: "#00000000", // Fully transparent
+      focusable: false, // Don't steal focus from underlying apps
+      skipTaskbar: true
+    }
+
+    this.overlayWindow = new BrowserWindow(overlaySettings)
+    
+    // Critical: Make the window transparent to mouse events by default
+    // The 'forward' option allows us to dynamically enable/disable specific regions
+    // this.overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+
+    if (process.platform === "darwin") {
+      this.overlayWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true
+      })
+      this.overlayWindow.setHiddenInMissionControl(true)
+      this.overlayWindow.setAlwaysOnTop(true, "screen-saver")
+    }
+
+    // Load a minimal overlay page (we'll create this)
+    const overlayUrl = isDev
+      ? "http://localhost:5180/overlay.html"
+      : `file://${path.join(__dirname, "../dist/overlay.html")}`
+
+    this.overlayWindow.loadURL(overlayUrl).catch((err) => {
+      console.error("Failed to load overlay URL:", err)
+    })
+
+    this.overlayWindow.on("closed", () => {
+      this.overlayWindow = null
+    })
+
+    return this.overlayWindow
+  }
+
+  public showOverlayWindow(): void {
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.show()
+      this.overlayWindow.focus()
+    }
+  }
+
+  public hideOverlayWindow(): void {
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.hide()
+    }
+  }
+
+  public getOverlayWindow(): BrowserWindow | null {
+    return this.overlayWindow
+  }
+
+  // Method to enable mouse events for specific regions on the main window
+  public setOverlayMouseRegions(regions: Array<{x: number, y: number, width: number, height: number}>): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+
+    if (regions.length === 0) {
+      // No regions - make main window transparent to mouse events (except for its own UI elements)
+      this.mainWindow.setIgnoreMouseEvents(true, { forward: true })
+    } else {
+      // Regions exist - enable mouse events for the main window
+      this.mainWindow.setIgnoreMouseEvents(false)
+    }
+  }
+
+  public destroyOverlayWindow(): void {
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.close()
+      this.overlayWindow = null
+    }
+  }
+
+  // Test methods for setIgnoreMouseEvents functionality
+  public enableClickCapture(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+    console.log("🎯 Enabling click capture - window will intercept all mouse events")
+    this.mainWindow.setIgnoreMouseEvents(false)
+  }
+
+  public enableClickThrough(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+    console.log("👻 Enabling click-through - clicks will pass to underlying applications")
+    this.mainWindow.setIgnoreMouseEvents(true, { forward: true })
+  }
+
+  public toggleClickMode(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+    
+    // Simple toggle - we'll track state if needed
+    const currentState = this.mainWindow.webContents.isDestroyed() ? false : true
+    
+    if (currentState) {
+      this.enableClickThrough()
+    } else {
+      this.enableClickCapture()
+    }
+  }
+
+  // Element overlay window management - one window per lens element
+  public createElementOverlayWindow(elementId: string, bounds: {x: number, y: number, width: number, height: number}): BrowserWindow {
+    // Close existing window for this element if it exists
+    if (this.elementOverlayWindows.has(elementId)) {
+      const existingWindow = this.elementOverlayWindows.get(elementId)
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        existingWindow.close()
+      }
+      this.elementOverlayWindows.delete(elementId)
+    }
+
+    console.log(`🪟 Creating overlay window for element ${elementId} at (${bounds.x}, ${bounds.y}) size ${bounds.width}x${bounds.height}`)
+
+    const overlaySettings: Electron.BrowserWindowConstructorOptions = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: true,
+        preload: path.join(__dirname, "../core/preload.js"),
+        additionalArguments: [`--element-id=${elementId}`] // Pass element ID to renderer
+      },
+      show: true,
+      alwaysOnTop: true,
+      transparent: true,
+      frame: false,
+      resizable: false,
+      fullscreenable: false,
+      hasShadow: false,
+      backgroundColor: "#00000000", // Fully transparent
+      focusable: true, // Allow interactions
+      skipTaskbar: true
+    }
+
+    const overlayWindow = new BrowserWindow(overlaySettings)
+    
+    // Load the same React app but with element-specific context
+    overlayWindow.loadURL(startUrl).catch((err) => {
+      console.error("Failed to load overlay URL:", err)
+    })
+
+    if (process.platform === "darwin") {
+      overlayWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true
+      })
+      overlayWindow.setHiddenInMissionControl(true)
+      overlayWindow.setAlwaysOnTop(true, "screen-saver")
+    }
+
+    // Handle window closed
+    overlayWindow.on("closed", () => {
+      console.log(`🗑️ Overlay window for element ${elementId} closed`)
+      this.elementOverlayWindows.delete(elementId)
+    })
+
+    // Store the window
+    this.elementOverlayWindows.set(elementId, overlayWindow)
+
+    return overlayWindow
+  }
+
+  public getElementOverlayWindows(): Map<string, BrowserWindow> {
+    return this.elementOverlayWindows
+  }
+
+  public closeElementOverlayWindow(elementId: string): void {
+    if (this.elementOverlayWindows.has(elementId)) {
+      const window = this.elementOverlayWindows.get(elementId)
+      if (window && !window.isDestroyed()) {
+        window.close()
+      }
+      this.elementOverlayWindows.delete(elementId)
+    }
+  }
+
+  public closeAllElementOverlayWindows(): void {
+    console.log(`🧹 Closing ${this.elementOverlayWindows.size} element overlay windows`)
+    
+    for (const [elementId, window] of this.elementOverlayWindows) {
+      if (window && !window.isDestroyed()) {
+        window.close()
+      }
+    }
+    
+    this.elementOverlayWindows.clear()
+  }
+
+  public resizeElementOverlayWindow(window: BrowserWindow, width: number, height: number): void {
+    if (window && !window.isDestroyed()) {
+      const [currentX, currentY] = window.getPosition()
+      
+      console.log(`📏 Resizing overlay window to ${width}x${height}`)
+      
+      window.setBounds({
+        x: currentX,
+        y: currentY,
+        width: Math.max(width, 50), // Minimum width
+        height: Math.max(height, 50) // Minimum height
+      })
+    }
+  }
+
+  // Selection overlay window for E + drag functionality
+  public createSelectionOverlayWindow(): BrowserWindow {
+    // Close existing selection overlay if it exists
+    if (this.selectionOverlayWindow && !this.selectionOverlayWindow.isDestroyed()) {
+      this.selectionOverlayWindow.close()
+      this.selectionOverlayWindow = null
+    }
+
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const { width, height } = primaryDisplay.bounds
+
+    console.log(`🎯 Creating selection overlay window covering entire screen: ${width}x${height}`)
+
+    const selectionSettings: Electron.BrowserWindowConstructorOptions = {
+      width: width,
+      height: height,
+      x: 0,
+      y: 0,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: true,
+        preload: path.join(__dirname, "../core/preload.js"),
+        additionalArguments: ['--selection-overlay'] // Flag to identify this as selection overlay
+      },
+      show: true,
+      alwaysOnTop: true,
+      transparent: true,
+      frame: false,
+      resizable: false,
+      fullscreenable: false,
+      hasShadow: false,
+      backgroundColor: "#00000000", // Fully transparent
+      focusable: true, // Allow mouse interactions
+      skipTaskbar: true
+    }
+
+    this.selectionOverlayWindow = new BrowserWindow(selectionSettings)
+    
+    // Load the same React app but with selection overlay context
+    this.selectionOverlayWindow.loadURL(startUrl).catch((err) => {
+      console.error("Failed to load selection overlay URL:", err)
+    })
+
+    if (process.platform === "darwin") {
+      this.selectionOverlayWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true
+      })
+      this.selectionOverlayWindow.setHiddenInMissionControl(true)
+      this.selectionOverlayWindow.setAlwaysOnTop(true, "screen-saver")
+    }
+
+    // Handle window closed
+    this.selectionOverlayWindow.on("closed", () => {
+      console.log(`🗑️ Selection overlay window closed`)
+      this.selectionOverlayWindow = null
+    })
+
+    return this.selectionOverlayWindow
+  }
+
+  public getSelectionOverlayWindow(): BrowserWindow | null {
+    return this.selectionOverlayWindow
+  }
+
+  public closeSelectionOverlayWindow(): void {
+    if (this.selectionOverlayWindow && !this.selectionOverlayWindow.isDestroyed()) {
+      console.log("🧹 Closing selection overlay window")
+      this.selectionOverlayWindow.close()
+      this.selectionOverlayWindow = null
+    }
+  }
+
+  // Method to create a contextual popup overlay at specific coordinates
+  public createContextualPopupOverlay(x: number, y: number, width: number = 300, height: number = 400): BrowserWindow {
+    console.log(`💬 Creating contextual popup at (${x}, ${y}) size ${width}x${height}`)
+
+    const popupSettings: Electron.BrowserWindowConstructorOptions = {
+      width: width,
+      height: height,
+      x: x,
+      y: y,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: true,
+        preload: path.join(__dirname, "../core/preload.js"),
+        additionalArguments: ['--contextual-popup'] // Flag for contextual popup
+      },
+      show: true,
+      alwaysOnTop: true,
+      transparent: true,
+      frame: false,
+      resizable: false,
+      fullscreenable: false,
+      hasShadow: true, // Give popup a shadow for visibility
+      backgroundColor: "#FFFFFF", // White background for popup
+      focusable: true,
+      skipTaskbar: true
+    }
+
+    const popupWindow = new BrowserWindow(popupSettings)
+    
+    // Load the React app with popup context
+    popupWindow.loadURL(startUrl).catch((err) => {
+      console.error("Failed to load contextual popup URL:", err)
+    })
+
+    if (process.platform === "darwin") {
+      popupWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true
+      })
+      popupWindow.setHiddenInMissionControl(true)
+      popupWindow.setAlwaysOnTop(true, "floating")
+    }
+
+    return popupWindow
   }
 }

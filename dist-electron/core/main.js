@@ -56,6 +56,9 @@ class AppState {
     getMainWindow() {
         return this.windowHelper.getMainWindow();
     }
+    createWindow() {
+        this.windowHelper.createWindow();
+    }
     getView() {
         return this.view;
     }
@@ -80,10 +83,6 @@ class AppState {
     }
     getExtraScreenshotQueue() {
         return this.screenshotHelper.getExtraScreenshotQueue();
-    }
-    // Window management methods
-    createWindow() {
-        this.windowHelper.createWindow();
     }
     hideMainWindow() {
         this.windowHelper.hideMainWindow();
@@ -137,6 +136,66 @@ class AppState {
     getHasDebugged() {
         return this.hasDebugged;
     }
+    // Overlay window management
+    setOverlayMouseRegions(regions) {
+        this.windowHelper.setOverlayMouseRegions(regions);
+    }
+    createOverlayWindow() {
+        return this.windowHelper.createOverlayWindow();
+    }
+    getOverlayWindow() {
+        return this.windowHelper.getOverlayWindow();
+    }
+    showOverlayWindow() {
+        this.windowHelper.showOverlayWindow();
+    }
+    hideOverlayWindow() {
+        this.windowHelper.hideOverlayWindow();
+    }
+    destroyOverlayWindow() {
+        this.windowHelper.destroyOverlayWindow();
+    }
+    // Test methods for setIgnoreMouseEvents functionality
+    enableClickCapture() {
+        this.windowHelper.enableClickCapture();
+    }
+    enableClickThrough() {
+        this.windowHelper.enableClickThrough();
+    }
+    toggleClickMode() {
+        this.windowHelper.toggleClickMode();
+    }
+    // Element overlay window management
+    createElementOverlayWindow(elementId, bounds) {
+        return this.windowHelper.createElementOverlayWindow(elementId, bounds);
+    }
+    closeElementOverlayWindow(elementId) {
+        this.windowHelper.closeElementOverlayWindow(elementId);
+    }
+    closeAllElementOverlayWindows() {
+        this.windowHelper.closeAllElementOverlayWindows();
+    }
+    resizeElementOverlayWindow(window, width, height) {
+        this.windowHelper.resizeElementOverlayWindow(window, width, height);
+    }
+    // Selection overlay window management for E + drag functionality
+    createSelectionOverlayWindow() {
+        return this.windowHelper.createSelectionOverlayWindow();
+    }
+    getSelectionOverlayWindow() {
+        return this.windowHelper.getSelectionOverlayWindow();
+    }
+    closeSelectionOverlayWindow() {
+        this.windowHelper.closeSelectionOverlayWindow();
+    }
+    createContextualPopupOverlay(x, y, width, height) {
+        return this.windowHelper.createContextualPopupOverlay(x, y, width, height);
+    }
+    // Screenshot cropping functionality
+    async cropScreenshotToRectangle(screenshotBuffer, rectangle) {
+        // Use the screenshot helper to crop the image
+        return this.screenshotHelper.cropImage(screenshotBuffer, rectangle);
+    }
 }
 exports.AppState = AppState;
 // Application initialization
@@ -146,6 +205,7 @@ async function initializeApp() {
     (0, ipcHandlers_1.initializeIpcHandlers)(appState);
     electron_1.app.whenReady().then(() => {
         console.log("App is ready");
+        // Create main window for the new binary state system
         appState.createWindow();
         // Register global shortcuts using ShortcutsHelper
         appState.shortcutsHelper.registerGlobalShortcuts();

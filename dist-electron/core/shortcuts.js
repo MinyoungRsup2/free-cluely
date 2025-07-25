@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShortcutsHelper = void 0;
 const electron_1 = require("electron");
 const LensHelper_1 = require("../lens/LensHelper");
-const LensStore_1 = require("../lens/LensStore");
 class ShortcutsHelper {
     appState;
     lensOperations;
@@ -18,11 +17,15 @@ class ShortcutsHelper {
             windowHelper: {
                 hideMainWindow: () => appState.hideMainWindow(),
                 showMainWindow: () => appState.showMainWindow(),
-                getMainWindow: () => appState.getMainWindow()
+                getMainWindow: () => appState.getMainWindow(),
+                setOverlayMouseRegions: (regions) => appState.setOverlayMouseRegions(regions),
+                createElementOverlayWindow: (elementId, bounds) => appState.createElementOverlayWindow(elementId, bounds),
+                closeElementOverlayWindow: (elementId) => appState.closeElementOverlayWindow(elementId),
+                closeAllElementOverlayWindows: () => appState.closeAllElementOverlayWindows()
             }
         };
         this.lensOperations = (0, LensHelper_1.createLensOperations)(dependencies);
-        this.lensActivation = (0, LensHelper_1.createLensActivation)(this.lensOperations);
+        this.lensActivation = (0, LensHelper_1.createLensActivation)(this.lensOperations, dependencies);
     }
     registerGlobalShortcuts() {
         electron_1.globalShortcut.register("CommandOrControl+H", async () => {
@@ -42,151 +45,135 @@ class ShortcutsHelper {
                 }
             }
         });
-        // globalShortcut.register("CommandOrControl+Enter", async () => {
-        //   await this.appState.processingHelper.processScreenshots()
-        // })
-        // New shortcuts for moving the window
-        // globalShortcut.register("CommandOrControl+Left", () => {
-        //   console.log("Command/Ctrl + Left pressed. Moving window left.")
-        //   this.appState.moveWindowLeft()
-        // })
-        // globalShortcut.register("CommandOrControl+Right", () => {
-        //   console.log("Command/Ctrl + Right pressed. Moving window right.")
-        //   this.appState.moveWindowRight()
-        // })
-        // globalShortcut.register("CommandOrControl+Down", () => {
-        //   console.log("Command/Ctrl + down pressed. Moving window down.")
-        //   this.appState.moveWindowDown()
-        // })
-        // globalShortcut.register("CommandOrControl+Up", () => {
-        //   console.log("Command/Ctrl + Up pressed. Moving window Up.")
-        //   this.appState.moveWindowUp()
-        // })
-        // globalShortcut.register("CommandOrControl+B", () => {
-        //   this.appState.toggleMainWindow()
-        //   // If window exists and we're showing it, bring it to front
-        //   const mainWindow = this.appState.getMainWindow()
-        //   if (mainWindow && !this.appState.isVisible()) {
-        //     // Force the window to the front on macOS
-        //     if (process.platform === "darwin") {
-        //       mainWindow.setAlwaysOnTop(true, "normal")
-        //       // Reset alwaysOnTop after a brief delay
-        //       setTimeout(() => {
-        //         if (mainWindow && !mainWindow.isDestroyed()) {
-        //           mainWindow.setAlwaysOnTop(true, "floating")
-        //         }
-        //       }, 100)
-        //     }
-        //   }
-        // })
-        // Shift+E lens activation shortcut
-        electron_1.globalShortcut.register("Shift+E", () => {
-            this.handleShiftEKeyPress();
+        // Test overlay windows with Cmd/Ctrl+T
+        electron_1.globalShortcut.register("CommandOrControl+T", async () => {
+            console.log("🧪 Testing overlay windows...");
+            try {
+                // Mock lens elements for testing
+                const mockElements = [
+                    {
+                        id: "test-element-1",
+                        type: "Button",
+                        bounds: { x: 100, y: 100, width: 200, height: 50 },
+                        confidence: 0.95,
+                        actions: ["Click", "Hover"],
+                        detected_structure: {
+                            "Label": { text: "Submit Button", confidence: 0.98 }
+                        }
+                    },
+                    {
+                        id: "test-element-2",
+                        type: "Input Field",
+                        bounds: { x: 100, y: 200, width: 300, height: 40 },
+                        confidence: 0.88,
+                        actions: ["Type", "Clear", "Focus"],
+                        detected_structure: {
+                            "Placeholder": { text: "Enter your name", confidence: 0.92 }
+                        }
+                    },
+                    {
+                        id: "test-element-3",
+                        type: "Dropdown",
+                        bounds: { x: 100, y: 300, width: 150, height: 35 },
+                        confidence: 0.92,
+                        actions: ["Click", "Select"],
+                        detected_structure: {
+                            "Label": { text: "Select Country", confidence: 0.89 }
+                        }
+                    }
+                ];
+                // Create overlay windows for each element
+                for (const element of mockElements) {
+                    const overlayWindow = this.appState.createElementOverlayWindow(element.id, element.bounds);
+                    // Send the element data to the overlay window once it's loaded
+                    overlayWindow.webContents.once('did-finish-load', () => {
+                        console.log(`📡 Sending element data to overlay window for ${element.id}`);
+                        overlayWindow.webContents.send('lens-overlay-element', element);
+                    });
+                }
+                console.log(`✅ Created ${mockElements.length} test overlay windows`);
+            }
+            catch (error) {
+                console.error("Error creating test overlay windows:", error);
+            }
+        });
+        // Close overlay windows with Cmd/Ctrl+Shift+T
+        electron_1.globalShortcut.register("CommandOrControl+Shift+T", async () => {
+            console.log("🧹 Closing all overlay windows...");
+            try {
+                this.appState.closeAllElementOverlayWindows();
+                console.log("✅ All overlay windows closed");
+            }
+            catch (error) {
+                console.error("Error closing overlay windows:", error);
+            }
+        });
+        // E key for lens drag selection
+        electron_1.globalShortcut.register("E", () => {
+            this.handleEKeyPress();
+        });
+        // Test E+drag system with Cmd/Ctrl+D
+        electron_1.globalShortcut.register("CommandOrControl+D", () => {
+            console.log("🧪 Testing E+drag system...");
+            this.handleEKeyPress();
         });
         // Unregister shortcuts when quitting
         electron_1.app.on("will-quit", () => {
             electron_1.globalShortcut.unregisterAll();
         });
     }
-    async handleShiftEKeyPress() {
+    async handleEKeyPress() {
         if (this.isEKeyPressed) {
-            console.log('Shift+E still held, ignoring duplicate press');
+            console.log('E key still held, ignoring duplicate press');
             return;
         }
         this.isEKeyPressed = true;
-        const store = LensStore_1.useLensStore.getState();
         try {
-            console.log('🔍 Shift+E pressed - activating lens mode');
-            // Set lens as active and show orbital loading
-            store.setActive(true);
-            store.setOrbitalVisible(true);
-            // Notify renderer of lens activation start
+            console.log('🎯 E key pressed - starting selection mode');
+            // Get main window and send selection activation event
             const mainWindow = this.appState.getMainWindow();
-            if (mainWindow) {
-                mainWindow.webContents.send('lens-activation-start');
-            }
-            // Activate lens with comprehensive analysis
-            const result = await this.lensActivation.activateLensStepByStep('athena');
-            if (result.isErr()) {
-                console.error('❌ Lens activation failed:', result.error.message);
-                // Notify renderer of error
-                if (mainWindow) {
-                    mainWindow.webContents.send('lens-activation-error', {
-                        message: result.error.message,
-                        type: result.error.type
-                    });
-                }
-                // Reset state
-                store.setActive(false);
-                store.setOrbitalVisible(false);
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                console.error('❌ Main window not available');
                 return;
             }
-            const lensState = result.value;
-            console.log('✅ Lens activated successfully:', {
-                route: lensState.currentRoute?.type,
-                elements: lensState.elements.length
-            });
-            // Update store with results
-            store.setCurrentRoute(lensState.currentRoute);
-            store.setElements(lensState.elements);
-            store.setOverlayWindow(lensState.overlayWindow);
-            store.setOrbitalVisible(false); // Hide loading, show overlay
-            // Notify renderer of successful activation
-            if (mainWindow) {
-                mainWindow.webContents.send('lens-activation-success', {
-                    route: lensState.currentRoute,
-                    elementsCount: lensState.elements.length
-                });
-            }
-            // Set up Shift+E release handler (simplified - in real implementation would need key event handling)
-            setTimeout(() => {
-                this.handleShiftEKeyRelease();
-            }, 5000); // Auto-release after 5 seconds for testing
+            // Send selection activation to main window
+            mainWindow.webContents.send('lens-selection-activate');
+            // Listen for selection completion from main window
+            const handleSelectionComplete = async (_event, rectangle) => {
+                console.log('🔲 Selection completed:', rectangle);
+                try {
+                    // Activate lens with drag selection
+                    const result = await this.lensActivation.activateLensWithDragSelection(rectangle, 'athena');
+                    if (result.isErr()) {
+                        console.error('❌ Lens drag activation failed:', result.error.message);
+                        // Send error back to main window
+                        mainWindow.webContents.send('lens-analysis-error', result.error.message);
+                        return;
+                    }
+                    const analysisResult = result.value;
+                    console.log('✅ Focused analysis completed:', analysisResult.element.type);
+                    // Send analysis results back to main window
+                    mainWindow.webContents.send('lens-analysis-result', analysisResult);
+                }
+                catch (error) {
+                    console.error('💥 Error processing selection:', error);
+                    mainWindow.webContents.send('lens-analysis-error', error.message);
+                }
+            };
+            const handleSelectionCancel = () => {
+                console.log('❌ Selection cancelled');
+                // Nothing special needed - main window will handle UI state
+            };
+            // Set up IPC listeners (temporarily)
+            const { ipcMain } = require('electron');
+            ipcMain.once('lens-selection-complete', handleSelectionComplete);
+            ipcMain.once('lens-selection-cancel', handleSelectionCancel);
         }
         catch (error) {
-            console.error('💥 Unexpected error in lens activation:', error);
-            // Reset state on error
-            store.setActive(false);
-            store.setOrbitalVisible(false);
-            const errorWindow = this.appState.getMainWindow();
-            if (errorWindow && !errorWindow.isDestroyed()) {
-                errorWindow.webContents.send('lens-activation-error', {
-                    message: 'Unexpected error during lens activation',
-                    type: 'UNKNOWN_ERROR'
-                });
-            }
+            console.error('💥 Unexpected error in E key handler:', error);
         }
         finally {
             this.isEKeyPressed = false;
-        }
-    }
-    handleShiftEKeyRelease() {
-        console.log('🔍 Shift+E released - deactivating lens mode');
-        const store = LensStore_1.useLensStore.getState();
-        const currentState = {
-            isActive: store.isActive,
-            orbitalVisible: store.orbitalVisible,
-            overlayWindow: store.overlayWindow,
-            currentRoute: store.currentRoute,
-            elements: store.elements,
-            cache: new Map() // TODO: get from store
-        };
-        // Deactivate lens
-        const result = this.lensActivation.deactivateLens(currentState);
-        if (result.isErr()) {
-            console.error('❌ Lens deactivation failed:', result.error.message);
-        }
-        else {
-            console.log('✅ Lens deactivated successfully');
-        }
-        // Reset store state
-        store.setActive(false);
-        store.setOrbitalVisible(false);
-        store.setOverlayWindow(null);
-        // Notify renderer
-        const mainWindow = this.appState.getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('lens-deactivated');
         }
     }
 }

@@ -66,13 +66,45 @@ interface ElectronAPI {
     bounds: { x: number; y: number; width: number; height: number }
     confidence: number
     actions: string[]
+    detected_structure: Record<string, any>
   }>) => void) => () => void
   onLensOrbitalShow: (callback: () => void) => () => void
   onLensOrbitalHide: (callback: () => void) => () => void
+  onLensOverlayElement: (callback: (element: {
+    id: string
+    type: string
+    bounds: { x: number; y: number; width: number; height: number }
+    confidence: number
+    actions: string[]
+    detected_structure: Record<string, any>
+  }) => void) => () => void
   onLensActivationStart: (callback: () => void) => () => void
   onLensActivationSuccess: (callback: (data: any) => void) => () => void
   onLensActivationError: (callback: (error: any) => void) => () => void
   onLensDeactivated: (callback: () => void) => () => void
+
+  // Overlay window management
+  setOverlayMouseRegions: (regions: Array<{x: number, y: number, width: number, height: number}>) => Promise<{ success: boolean; error?: string }>
+  
+  // Test methods for setIgnoreMouseEvents
+  testEnableClickCapture: () => Promise<{ success: boolean; error?: string }>
+  testEnableClickThrough: () => Promise<{ success: boolean; error?: string }>
+  testToggleClickMode: () => Promise<{ success: boolean; error?: string }>
+  
+  // Test methods for overlay windows
+  testCreateOverlayWindows: () => Promise<{ success: boolean; elements?: any[]; error?: string }>
+  testCloseOverlayWindows: () => Promise<{ success: boolean; error?: string }>
+
+  // Overlay window resizing
+  resizeOverlayWindow: (dimensions: { elementId?: string; width: number; height: number }) => Promise<{ success: boolean; error?: string }>
+
+  // Selection overlay events
+  onLensSelectionActivate: (callback: () => void) => () => void
+  sendSelectionComplete: (rectangle: {x: number, y: number, width: number, height: number}) => Promise<void>
+  sendSelectionCancel: () => Promise<void>
+
+  // Analysis result events
+  onLensAnalysisResult: (callback: (data: any) => void) => () => void
 }
 
 export const PROCESSING_EVENTS = {
@@ -246,6 +278,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     bounds: { x: number; y: number; width: number; height: number }
     confidence: number
     actions: string[]
+    detected_structure: Record<string, any>
   }>) => void) => {
     const subscription = (_: any, elements: Array<any>) => callback(elements)
     ipcRenderer.on("lens-overlay-elements", subscription)
@@ -265,6 +298,100 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("lens-orbital-hide", subscription)
     return () => {
       ipcRenderer.removeListener("lens-orbital-hide", subscription)
+    }
+  },
+  
+  // Single element event for individual overlay windows
+  onLensOverlayElement: (callback: (element: {
+    id: string
+    type: string
+    bounds: { x: number; y: number; width: number; height: number }
+    confidence: number
+    actions: string[]
+    detected_structure: Record<string, any>
+  }) => void) => {
+    const subscription = (_: any, element: any) => callback(element)
+    ipcRenderer.on("lens-overlay-element", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-overlay-element", subscription)
+    }
+  },
+
+  // Overlay window management
+  setOverlayMouseRegions: (regions: Array<{x: number, y: number, width: number, height: number}>) => 
+    ipcRenderer.invoke("set-overlay-mouse-regions", regions),
+
+  // Test methods for setIgnoreMouseEvents
+  testEnableClickCapture: () => ipcRenderer.invoke("test-enable-click-capture"),
+  testEnableClickThrough: () => ipcRenderer.invoke("test-enable-click-through"), 
+  testToggleClickMode: () => ipcRenderer.invoke("test-toggle-click-mode"),
+  
+  // Test methods for overlay windows
+  testCreateOverlayWindows: () => ipcRenderer.invoke("test-create-overlay-windows"),
+  testCloseOverlayWindows: () => ipcRenderer.invoke("test-close-overlay-windows"),
+
+  // Overlay window resizing
+  resizeOverlayWindow: (dimensions: { elementId?: string; width: number; height: number }) => 
+    ipcRenderer.invoke("resize-overlay-window", dimensions),
+
+  // Lens activation events (placeholders for now)
+  onLensActivationStart: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("lens-activation-start", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-activation-start", subscription)
+    }
+  },
+  onLensActivationSuccess: (callback: (data: any) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("lens-activation-success", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-activation-success", subscription)
+    }
+  },
+  onLensActivationError: (callback: (error: string) => void) => {
+    const subscription = (_: any, error: string) => callback(error)
+    ipcRenderer.on("lens-activation-error", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-activation-error", subscription)
+    }
+  },
+  onLensDeactivated: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("lens-deactivated", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-deactivated", subscription)
+    }
+  },
+
+  // Selection overlay events
+  onLensSelectionActivate: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("lens-selection-activate", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-selection-activate", subscription)
+    }
+  },
+  sendSelectionComplete: (rectangle: {x: number, y: number, width: number, height: number}) => 
+    ipcRenderer.invoke("lens-selection-complete", rectangle),
+  sendSelectionCancel: () => 
+    ipcRenderer.invoke("lens-selection-cancel"),
+
+  // Analysis result events
+  onLensAnalysisResult: (callback: (data: any) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("lens-analysis-result", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-analysis-result", subscription)
+    }
+  },
+
+  // Analysis error events  
+  onLensAnalysisError: (callback: (error: string) => void) => {
+    const subscription = (_: any, error: string) => callback(error)
+    ipcRenderer.on("lens-analysis-error", subscription)
+    return () => {
+      ipcRenderer.removeListener("lens-analysis-error", subscription)
     }
   }
 } as ElectronAPI)

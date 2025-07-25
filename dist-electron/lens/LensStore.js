@@ -39,7 +39,7 @@ exports.useLensStore = (0, zustand_1.create)()((0, middleware_1.persist)((set, g
     // Initial state
     isActive: false,
     orbitalVisible: false,
-    overlayWindow: null,
+    overlayWindows: new Map(),
     currentRoute: null,
     elements: [],
     cache: new Map(),
@@ -48,22 +48,53 @@ exports.useLensStore = (0, zustand_1.create)()((0, middleware_1.persist)((set, g
         set({ isActive: active });
         if (!active) {
             // Clean up when deactivating
+            const state = get();
+            // Close all overlay windows
+            state.overlayWindows.forEach(window => {
+                if (!window.isDestroyed()) {
+                    window.close();
+                }
+            });
             set({
                 orbitalVisible: false,
-                overlayWindow: null,
+                overlayWindows: new Map(),
                 elements: []
             });
         }
     },
     setOrbitalVisible: (visible) => set({ orbitalVisible: visible }),
-    setOverlayWindow: (window) => set({ overlayWindow: window }),
+    addOverlayWindow: (elementId, window) => {
+        const state = get();
+        const newWindows = new Map(state.overlayWindows);
+        newWindows.set(elementId, window);
+        set({ overlayWindows: newWindows });
+    },
+    removeOverlayWindow: (elementId) => {
+        const state = get();
+        const window = state.overlayWindows.get(elementId);
+        if (window && !window.isDestroyed()) {
+            window.close();
+        }
+        const newWindows = new Map(state.overlayWindows);
+        newWindows.delete(elementId);
+        set({ overlayWindows: newWindows });
+    },
+    clearOverlayWindows: () => {
+        const state = get();
+        state.overlayWindows.forEach(window => {
+            if (!window.isDestroyed()) {
+                window.close();
+            }
+        });
+        set({ overlayWindows: new Map() });
+    },
     setCurrentRoute: (route) => set({ currentRoute: route }),
     setElements: (elements) => set({ elements }),
     clearCache: () => set({ cache: new Map() }),
     // Computed values
-    hasActiveOverlay: () => {
+    hasActiveOverlays: () => {
         const state = get();
-        return state.overlayWindow !== null && !state.overlayWindow?.isDestroyed();
+        return Array.from(state.overlayWindows.values()).some(window => window && !window.isDestroyed());
     },
     isRouteDetected: () => {
         const state = get();
@@ -72,6 +103,14 @@ exports.useLensStore = (0, zustand_1.create)()((0, middleware_1.persist)((set, g
     getElementCount: () => {
         const state = get();
         return state.elements.length;
+    },
+    getOverlayWindowCount: () => {
+        const state = get();
+        return state.overlayWindows.size;
+    },
+    getOverlayWindows: () => {
+        const state = get();
+        return Array.from(state.overlayWindows.values()).filter(window => window && !window.isDestroyed());
     },
     // Cache operations
     getCacheSize: () => {
@@ -112,7 +151,8 @@ exports.lensStoreHelpers = {
             active: store.isActive,
             hasRoute: store.isRouteDetected(),
             elementCount: store.getElementCount(),
-            hasOverlay: store.hasActiveOverlay(),
+            overlayWindowCount: store.getOverlayWindowCount(),
+            hasOverlays: store.hasActiveOverlays(),
             cacheSize: store.getCacheSize()
         };
     },
@@ -124,8 +164,9 @@ exports.lensStoreHelpers = {
             orbitalVisible: store.orbitalVisible,
             currentRoute: store.currentRoute,
             elementCount: store.elements.length,
+            overlayWindowCount: store.overlayWindows.size,
             cacheSize: store.cache.size,
-            hasOverlay: store.hasActiveOverlay()
+            hasOverlays: store.hasActiveOverlays()
         });
     }
 };

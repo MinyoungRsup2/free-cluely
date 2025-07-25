@@ -10,6 +10,7 @@ const node_fs_1 = __importDefault(require("node:fs"));
 const electron_1 = require("electron");
 const uuid_1 = require("uuid");
 const screenshot_desktop_1 = __importDefault(require("screenshot-desktop"));
+const sharp_1 = __importDefault(require("sharp"));
 class ScreenshotHelper {
     screenshotQueue = [];
     extraScreenshotQueue = [];
@@ -146,6 +147,32 @@ class ScreenshotHelper {
         }
         finally {
             showMainWindow();
+        }
+    }
+    /**
+     * Crop image buffer to specified rectangle for E + drag functionality
+     */
+    async cropImage(imageBuffer, rectangle) {
+        try {
+            console.log(`🔪 Cropping image to rectangle: (${rectangle.x}, ${rectangle.y}) ${rectangle.width}x${rectangle.height}`);
+            // Ensure coordinates are integers and within bounds
+            const cropOptions = {
+                left: Math.max(0, Math.floor(rectangle.x)),
+                top: Math.max(0, Math.floor(rectangle.y)),
+                width: Math.max(1, Math.floor(rectangle.width)),
+                height: Math.max(1, Math.floor(rectangle.height))
+            };
+            // Use sharp to crop the image
+            const croppedBuffer = await (0, sharp_1.default)(imageBuffer)
+                .extract(cropOptions)
+                .png()
+                .toBuffer();
+            console.log(`✂️ Successfully cropped image to ${cropOptions.width}x${cropOptions.height}`);
+            return croppedBuffer;
+        }
+        catch (error) {
+            console.error('❌ Error cropping image:', error);
+            throw new Error(`Failed to crop image: ${error.message}`);
         }
     }
 }

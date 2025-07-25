@@ -153,6 +153,80 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
         return () => {
             electron_1.ipcRenderer.removeListener("lens-orbital-hide", subscription);
         };
+    },
+    // Single element event for individual overlay windows
+    onLensOverlayElement: (callback) => {
+        const subscription = (_, element) => callback(element);
+        electron_1.ipcRenderer.on("lens-overlay-element", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-overlay-element", subscription);
+        };
+    },
+    // Overlay window management
+    setOverlayMouseRegions: (regions) => electron_1.ipcRenderer.invoke("set-overlay-mouse-regions", regions),
+    // Test methods for setIgnoreMouseEvents
+    testEnableClickCapture: () => electron_1.ipcRenderer.invoke("test-enable-click-capture"),
+    testEnableClickThrough: () => electron_1.ipcRenderer.invoke("test-enable-click-through"),
+    testToggleClickMode: () => electron_1.ipcRenderer.invoke("test-toggle-click-mode"),
+    // Test methods for overlay windows
+    testCreateOverlayWindows: () => electron_1.ipcRenderer.invoke("test-create-overlay-windows"),
+    testCloseOverlayWindows: () => electron_1.ipcRenderer.invoke("test-close-overlay-windows"),
+    // Overlay window resizing
+    resizeOverlayWindow: (dimensions) => electron_1.ipcRenderer.invoke("resize-overlay-window", dimensions),
+    // Lens activation events (placeholders for now)
+    onLensActivationStart: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on("lens-activation-start", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-activation-start", subscription);
+        };
+    },
+    onLensActivationSuccess: (callback) => {
+        const subscription = (_, data) => callback(data);
+        electron_1.ipcRenderer.on("lens-activation-success", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-activation-success", subscription);
+        };
+    },
+    onLensActivationError: (callback) => {
+        const subscription = (_, error) => callback(error);
+        electron_1.ipcRenderer.on("lens-activation-error", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-activation-error", subscription);
+        };
+    },
+    onLensDeactivated: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on("lens-deactivated", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-deactivated", subscription);
+        };
+    },
+    // Selection overlay events
+    onLensSelectionActivate: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on("lens-selection-activate", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-selection-activate", subscription);
+        };
+    },
+    sendSelectionComplete: (rectangle) => electron_1.ipcRenderer.invoke("lens-selection-complete", rectangle),
+    sendSelectionCancel: () => electron_1.ipcRenderer.invoke("lens-selection-cancel"),
+    // Analysis result events
+    onLensAnalysisResult: (callback) => {
+        const subscription = (_, data) => callback(data);
+        electron_1.ipcRenderer.on("lens-analysis-result", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-analysis-result", subscription);
+        };
+    },
+    // Analysis error events  
+    onLensAnalysisError: (callback) => {
+        const subscription = (_, error) => callback(error);
+        electron_1.ipcRenderer.on("lens-analysis-error", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("lens-analysis-error", subscription);
+        };
     }
 });
 //# sourceMappingURL=preload.js.map

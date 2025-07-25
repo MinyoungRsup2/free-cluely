@@ -75,6 +75,10 @@ export class AppState {
     return this.windowHelper.getMainWindow()
   }
 
+  public createWindow(): void {
+    this.windowHelper.createWindow()
+  }
+
   public getView(): "queue" | "solutions" {
     return this.view
   }
@@ -106,11 +110,6 @@ export class AppState {
 
   public getExtraScreenshotQueue(): string[] {
     return this.screenshotHelper.getExtraScreenshotQueue()
-  }
-
-  // Window management methods
-  public createWindow(): void {
-    this.windowHelper.createWindow()
   }
 
   public hideMainWindow(): void {
@@ -189,6 +188,84 @@ export class AppState {
   public getHasDebugged(): boolean {
     return this.hasDebugged
   }
+
+  // Overlay window management
+  public setOverlayMouseRegions(regions: Array<{x: number, y: number, width: number, height: number}>): void {
+    this.windowHelper.setOverlayMouseRegions(regions)
+  }
+
+  public createOverlayWindow(): Electron.BrowserWindow | null {
+    return this.windowHelper.createOverlayWindow()
+  }
+
+  public getOverlayWindow(): Electron.BrowserWindow | null {
+    return this.windowHelper.getOverlayWindow()
+  }
+
+  public showOverlayWindow(): void {
+    this.windowHelper.showOverlayWindow()
+  }
+
+  public hideOverlayWindow(): void {
+    this.windowHelper.hideOverlayWindow()
+  }
+
+  public destroyOverlayWindow(): void {
+    this.windowHelper.destroyOverlayWindow()
+  }
+
+  // Test methods for setIgnoreMouseEvents functionality
+  public enableClickCapture(): void {
+    this.windowHelper.enableClickCapture()
+  }
+
+  public enableClickThrough(): void {
+    this.windowHelper.enableClickThrough()
+  }
+
+  public toggleClickMode(): void {
+    this.windowHelper.toggleClickMode()
+  }
+
+  // Element overlay window management
+  public createElementOverlayWindow(elementId: string, bounds: {x: number, y: number, width: number, height: number}): Electron.BrowserWindow {
+    return this.windowHelper.createElementOverlayWindow(elementId, bounds)
+  }
+
+  public closeElementOverlayWindow(elementId: string): void {
+    this.windowHelper.closeElementOverlayWindow(elementId)
+  }
+
+  public closeAllElementOverlayWindows(): void {
+    this.windowHelper.closeAllElementOverlayWindows()
+  }
+
+  public resizeElementOverlayWindow(window: BrowserWindow, width: number, height: number): void {
+    this.windowHelper.resizeElementOverlayWindow(window, width, height)
+  }
+
+  // Selection overlay window management for E + drag functionality
+  public createSelectionOverlayWindow(): Electron.BrowserWindow {
+    return this.windowHelper.createSelectionOverlayWindow()
+  }
+
+  public getSelectionOverlayWindow(): Electron.BrowserWindow | null {
+    return this.windowHelper.getSelectionOverlayWindow()
+  }
+
+  public closeSelectionOverlayWindow(): void {
+    this.windowHelper.closeSelectionOverlayWindow()
+  }
+
+  public createContextualPopupOverlay(x: number, y: number, width?: number, height?: number): Electron.BrowserWindow {
+    return this.windowHelper.createContextualPopupOverlay(x, y, width, height)
+  }
+
+  // Screenshot cropping functionality
+  public async cropScreenshotToRectangle(screenshotBuffer: Buffer, rectangle: {x: number, y: number, width: number, height: number}): Promise<Buffer> {
+    // Use the screenshot helper to crop the image
+    return this.screenshotHelper.cropImage(screenshotBuffer, rectangle)
+  }
 }
 
 // Application initialization
@@ -200,6 +277,7 @@ async function initializeApp() {
 
   app.whenReady().then(() => {
     console.log("App is ready")
+    // Create main window for the new binary state system
     appState.createWindow()
     // Register global shortcuts using ShortcutsHelper
     appState.shortcutsHelper.registerGlobalShortcuts()

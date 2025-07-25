@@ -3,21 +3,10 @@ import fs from "fs"
 
 export class LLMHelper {
   private model: GenerativeModel
-  private readonly systemPrompt = `You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`
 
   constructor(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey)
     this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-  }
-
-  private async fileToGenerativePart(imagePath: string) {
-    const imageData = await fs.promises.readFile(imagePath)
-    return {
-      inlineData: {
-        data: imageData.toString("base64"),
-        mimeType: "image/png"
-      }
-    }
   }
 
   private cleanJsonResponse(text: string): string {

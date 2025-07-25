@@ -28,16 +28,20 @@ const BoundsArraySchema = z.array(z.number()).length(4).transform((arr) => ({
 export const ElementResponseSchema = z.object({
   type: z.string().min(1, 'Element type is required'),
   bounds: BoundsSchema.optional(),
-  box: BoundsArraySchema.optional(), // Handle AI returning "box" array
+  box: BoundsArraySchema.optional() , // Handle AI returning "box" array
   confidence: z.number().min(0).max(1, 'Confidence must be between 0 and 1'),
-  detected_structure: z.array(z.string()).optional(),
+  detected_structure: z.record(z.string(), z.object({
+    text: z.string().min(1, 'Detected text is required'),
+    confidence: z.number().min(0).max(1, 'Detected text confidence must be between 0 and 1'),
+    position_found: z.string().optional() // Optional field
+  })),
   suggested_actions: z.array(z.string()).optional(),
   actions: z.array(z.string()).optional() // Handle AI returning "actions" instead
 }).transform((data) => ({
   type: data.type,
   bounds: data.bounds || data.box || { x: 0, y: 0, width: 0, height: 0 },
   confidence: data.confidence,
-  detected_structure: data.detected_structure || [],
+  detected_structure: data.detected_structure || {},
   suggested_actions: data.suggested_actions || data.actions || []
 }))
 
@@ -46,6 +50,30 @@ export const ElementsArraySchema = z.array(ElementResponseSchema)
 export const ComprehensiveResponseSchema = z.object({
   route: RouteResponseSchema,
   elements: ElementsArraySchema.optional().default([])
+})
+
+// Schema for focused rectangle analysis (E + drag functionality)
+export const FocusedElementResponseSchema = z.object({
+  element: z.object({
+    type: z.string().min(1, 'Element type is required'),
+    description: z.string().min(1, 'Element description is required'),
+    confidence: z.number().min(0).max(1, 'Confidence must be between 0 and 1'),
+    detected_structure: z.record(z.string(), z.object({
+      text: z.string().min(1, 'Detected text is required'),
+      confidence: z.number().min(0).max(1, 'Detected text confidence must be between 0 and 1'),
+      position_found: z.string().optional() // Optional field
+    })),
+    suggested_actions: z.array(z.string()).min(1, 'At least one suggested action required'),
+    ehr_context: z.object({
+      page_type: z.string(),
+      likely_workflow: z.string().optional()
+    }).optional()
+  }),
+  context: z.object({
+    appears_to_be: z.string().min(1, 'Context description required'),
+    ui_pattern: z.string().min(1, 'UI pattern classification required'),
+    confidence: z.number().min(0).max(1).optional()
+  })
 })
 
 // Safe parsing utilities with warning messages
@@ -86,6 +114,8 @@ export const parseWithWarnings = {
   elements: (data: unknown): { success: boolean; data: z.infer<typeof ElementsArraySchema>; warnings: string[] } => {
     const result = ElementsArraySchema.safeParse(data)
     const warnings: string[] = []
+
+    console.log("result", result)
     
     if (!result.success) {
       warnings.push(`Elements parsing failed: ${result.error.message}`)
@@ -169,6 +199,59 @@ export const parseWithWarnings = {
     }
     
     return { success: true, data: result.data, warnings }
+  },
+
+  focusedElement: (data: unknown): {
+    success: boolean;
+    data?: z.infer<typeof FocusedElementResponseSchema>;
+    warnings: string[]
+  } => {
+    console.log("🔍 Parsing focused element response:", data)
+    const result = FocusedElementResponseSchema.safeParse(data)
+
+    console.log("FocusedElementResponseSchema result:", result)
+    const warnings: string[] = []
+    
+    if (!result.success) {
+      warnings.push(`Focused element parsing failed: ${result.error.message}`)
+      
+      // Try to extract partial data with fallbacks
+      const rawData = typeof data === 'object' && data !== null ? data as any : {}
+      
+      const fallbackData = {
+        element: {
+          type: rawData.element?.type || 'unknown-element',
+          description: rawData.element?.description || 'Unknown UI element',
+          confidence: (typeof rawData.element?.confidence === 'number' &&
+                      rawData.element?.confidence >= 0 &&
+                      rawData.element?.confidence <= 1)
+            ? rawData.element.confidence
+            : 0.5,
+          detectedStructure: rawData.element?.detected_structure || {},
+          suggested_actions: Array.isArray(rawData.element?.suggested_actions)
+            ? rawData.element.suggested_actions
+            : ['View details', 'Click to interact'],
+          ehr_context: {
+            page_type: rawData.element?.ehr_context?.page_type || 'unknown-page',
+            likely_workflow: rawData.element?.ehr_context?.likely_workflow || 'General interaction'
+          }
+        },
+        context: {
+          appears_to_be: rawData.context?.appears_to_be || 'UI element',
+          ui_pattern: rawData.context?.ui_pattern || 'unknown',
+          confidence: (typeof rawData.context?.confidence === 'number' &&
+                      rawData.context?.confidence >= 0 &&
+                      rawData.context?.confidence <= 1)
+            ? rawData.context.confidence
+            : 0.5
+        }
+      }
+      
+      warnings.push(`Using fallback focused element data`)
+      return { success: false, data: fallbackData, warnings }
+    }
+    
+    return { success: true, data: result.data, warnings }
   }
 }
 
@@ -177,3 +260,4 @@ export type RouteResponse = z.infer<typeof RouteResponseSchema>
 export type ElementResponse = z.infer<typeof ElementResponseSchema>
 export type ElementsArray = z.infer<typeof ElementsArraySchema>
 export type ComprehensiveResponse = z.infer<typeof ComprehensiveResponseSchema>
+export type FocusedElementResponse = z.infer<typeof FocusedElementResponseSchema>

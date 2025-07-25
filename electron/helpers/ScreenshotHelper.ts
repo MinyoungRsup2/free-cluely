@@ -5,6 +5,7 @@ import fs from "node:fs"
 import { app } from "electron"
 import { v4 as uuidv4 } from "uuid"
 import screenshot from "screenshot-desktop"
+import sharp from "sharp"
 
 export class ScreenshotHelper {
   private screenshotQueue: string[] = []
@@ -175,6 +176,39 @@ export class ScreenshotHelper {
       return buffer
     } finally {
       showMainWindow()
+    }
+  }
+
+  /**
+   * Crop image buffer to specified rectangle for E + drag functionality
+   */
+  public async cropImage(
+    imageBuffer: Buffer, 
+    rectangle: {x: number, y: number, width: number, height: number}
+  ): Promise<Buffer> {
+    try {
+      console.log(`🔪 Cropping image to rectangle: (${rectangle.x}, ${rectangle.y}) ${rectangle.width}x${rectangle.height}`)
+      
+      // Ensure coordinates are integers and within bounds
+      const cropOptions = {
+        left: Math.max(0, Math.floor(rectangle.x)),
+        top: Math.max(0, Math.floor(rectangle.y)),
+        width: Math.max(1, Math.floor(rectangle.width)),
+        height: Math.max(1, Math.floor(rectangle.height))
+      }
+      
+      // Use sharp to crop the image
+      const croppedBuffer = await sharp(imageBuffer)
+        .extract(cropOptions)
+        .png()
+        .toBuffer()
+        
+      console.log(`✂️ Successfully cropped image to ${cropOptions.width}x${cropOptions.height}`)
+      return croppedBuffer
+      
+    } catch (error) {
+      console.error('❌ Error cropping image:', error)
+      throw new Error(`Failed to crop image: ${error.message}`)
     }
   }
 }

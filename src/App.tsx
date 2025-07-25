@@ -1,13 +1,11 @@
-import { ToastProvider } from "./components/ui/toast"
-import Queue from "./_pages/Queue"
-import { ToastViewport } from "@radix-ui/react-toast"
-import { useEffect, useRef, useState } from "react"
-import { QueryClient, QueryClientProvider } from "react-query"
-import { Lens } from "./components/Lens"
+import { useEffect, useState } from "react"
+import { SelectionOverlay } from "./components/SelectionOverlay"
+import { ContextualPopup } from "./components/ContextualPopup"
 
 declare global {
   interface Window {
     electronAPI: {
+      resizeOverlayWindow(arg0: { elementId: string; width: number; height: number }): unknown
       //RANDOM GETTER/SETTERS
       updateContentDimensions: (dimensions: {
         width: number
@@ -74,140 +72,158 @@ declare global {
       }>; error?: string }>
 
       // Lens system events
-      onLensOverlayElements: (callback: (elements: Array<{
+      onLensOverlayElement: (callback: (elements: {
         id: string
         type: string
         bounds: { x: number; y: number; width: number; height: number }
         confidence: number
         actions: string[]
-      }>) => void) => () => void
+        detected_structure: Record<string, {
+          text: string
+          confidence: number
+          position_found?: string
+        }>
+      }) => void) => () => void
       onLensOrbitalShow: (callback: () => void) => () => void
       onLensOrbitalHide: (callback: () => void) => () => void
       onLensActivationStart: (callback: () => void) => () => void
       onLensActivationSuccess: (callback: (data: any) => void) => () => void
       onLensActivationError: (callback: (error: any) => void) => () => void
       onLensDeactivated: (callback: () => void) => () => void
+
+      // Selection overlay events
+      onLensSelectionActivate: (callback: () => void) => () => void
+      sendSelectionComplete: (rectangle: {x: number, y: number, width: number, height: number}) => Promise<void>
+      sendSelectionCancel: () => Promise<void>
+
+      // Analysis result events
+      onLensAnalysisResult: (callback: (data: any) => void) => () => void
+      onLensAnalysisError: (callback: (error: string) => void) => () => void
+
+      // Test methods
+      testEnableClickCapture: () => Promise<{ success: boolean; error?: string }>
+      testEnableClickThrough: () => Promise<{ success: boolean; error?: string }>
+      testToggleClickMode: () => Promise<{ success: boolean; error?: string }>
+      testCreateOverlayWindows: () => Promise<{ success: boolean; elements?: any[]; error?: string }>
+      testCloseOverlayWindows: () => Promise<{ success: boolean; error?: string }>
     }
   }
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: Infinity,
-      cacheTime: Infinity
-    }
-  }
-})
 
 const App: React.FC = () => {
-  const [view, setView] = useState<"queue" | "solutions" | "debug">("queue")
-  const [lensVisible, setLensVisible] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  // Binary state system: either showing selection overlay or popup with results
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Effect for height monitoring
   useEffect(() => {
-    const cleanup = window.electronAPI.onResetView(() => {
-      console.log("Received 'reset-view' message from main process.")
-      queryClient.invalidateQueries(["screenshots"])
-      queryClient.invalidateQueries(["problem_statement"])
-      queryClient.invalidateQueries(["solution"])
-      queryClient.invalidateQueries(["new_solution"])
-      setView("queue")
+    // Listen for E key activation to start selection mode
+    const unsubscribeSelection = window.electronAPI.onLensSelectionActivate(() => {
+      console.log('🎯 Selection mode activated')
+      setIsSelectionMode(true)
+      setAnalysisResult(null) // Clear any previous results
+      setIsLoading(false) // Reset loading state
     })
 
+    // Listen for analysis results to show popup
+    const unsubscribeResults = window.electronAPI.onLensAnalysisResult((data) => {
+      console.log('📊 Analysis results received:', data)
+      setAnalysisResult(data)
+      setIsSelectionMode(false)
+      setIsLoading(false)
+    })
+
+    // Listen for analysis errors
+    const unsubscribeErrors = window.electronAPI.onLensAnalysisError?.((error) => {
+      console.error('❌ Analysis error received:', error)
+      setIsSelectionMode(false)
+      setIsLoading(false)
+      // Could show error message to user here if needed
+    }) || (() => {})
+
     return () => {
-      cleanup()
+      unsubscribeSelection()
+      unsubscribeResults()
+      unsubscribeErrors()
     }
   }, [])
 
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const updateHeight = () => {
-      if (!containerRef.current) return
-      const height = containerRef.current.scrollHeight
-      const width = containerRef.current.scrollWidth
-      window.electronAPI?.updateContentDimensions({ width, height })
+  const handleSelectionComplete = async (rectangle: { x: number; y: number; width: number; height: number }) => {
+    console.log('✅ Selection completed:', rectangle)
+    setIsSelectionMode(false)
+    setIsLoading(true)
+    
+    try {
+      await window.electronAPI.sendSelectionComplete(rectangle)
+    } catch (error) {
+      console.error('❌ Failed to send selection:', error)
+      setIsLoading(false)
     }
+  }
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateHeight()
-    })
-
-    // Initial height update
-    updateHeight()
-
-    // Observe for changes
-    resizeObserver.observe(containerRef.current)
-
-    // Also update height when view changes
-    const mutationObserver = new MutationObserver(() => {
-      updateHeight()
-    })
-
-    mutationObserver.observe(containerRef.current, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      characterData: true
-    })
-
-    return () => {
-      resizeObserver.disconnect()
-      mutationObserver.disconnect()
+  const handleSelectionCancel = async () => {
+    console.log('❌ Selection cancelled')
+    setIsSelectionMode(false)
+    
+    try {
+      await window.electronAPI.sendSelectionCancel()
+    } catch (error) {
+      console.error('❌ Failed to cancel selection:', error)
     }
-  }, [view]) // Re-run when view changes
+  }
 
-  useEffect(() => {
-    const cleanupFunctions = [
-      window.electronAPI.onSolutionStart(() => {
-        setView("solutions")
-        console.log("starting processing")
-      }),
+  const handlePopupClose = () => {
+    console.log('🗑️ Popup closed')
+    setAnalysisResult(null)
+    setIsLoading(false)
+  }
 
-      window.electronAPI.onUnauthorized(() => {
-        queryClient.removeQueries(["screenshots"])
-        queryClient.removeQueries(["solution"])
-        queryClient.removeQueries(["problem_statement"])
-        setView("queue")
-        console.log("Unauthorized")
-      }),
-      // Update this reset handler
-      window.electronAPI.onResetView(() => {
-        console.log("Received 'reset-view' message from main process")
+  const handleActionClick = (action: string) => {
+    console.log('🎬 Action clicked:', action)
+    // TODO: Implement action execution
+    setAnalysisResult(null) // Close popup after action
+  }
 
-        queryClient.removeQueries(["screenshots"])
-        queryClient.removeQueries(["solution"])
-        queryClient.removeQueries(["problem_statement"])
-        setView("queue")
-        console.log("View reset to 'queue' via Command+R shortcut")
-      }),
-      window.electronAPI.onProblemExtracted((data: any) => {
-        if (view === "queue") {
-          console.log("Problem extracted successfully")
-          queryClient.invalidateQueries(["problem_statement"])
-          queryClient.setQueryData(["problem_statement"], data)
-        }
-      })
-    ]
-    return () => cleanupFunctions.forEach((cleanup) => cleanup())
-  }, [])
+  // Binary state rendering
+  if (isSelectionMode) {
+    return (
+      <SelectionOverlay 
+        onSelectionComplete={handleSelectionComplete}
+        onCancel={handleSelectionCancel}
+      />
+    )
+  }
 
-  return (
-    <>
-      <div ref={containerRef} className="min-h-0 flex w-fit">
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-              <Queue setView={setView} />
-            <ToastViewport />
-          </ToastProvider>
-        </QueryClientProvider>
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div className="bg-white rounded-lg p-6 shadow-xl">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="text-gray-700">Analyzing selection...</span>
+          </div>
+        </div>
       </div>
-      
-      {/* Lens Overlay System */}
-      <Lens visible={lensVisible} onVisibilityChange={setLensVisible} />
-    </>
+    )
+  }
+
+  if (analysisResult) {
+    return (
+      <ContextualPopup
+        data={analysisResult}
+        onClose={handlePopupClose}
+        onActionClick={handleActionClick}
+        position={{ x: 0, y: 0 }} // Position handled by centering
+      />
+    )
+  }
+
+  // Default idle state - minimal UI
+  return (
+    <div className="fixed bottom-4 right-4 text-sm text-gray-500 bg-white bg-opacity-75 px-3 py-2 rounded shadow">
+      Press E to start selection
+    </div>
   )
 }
 

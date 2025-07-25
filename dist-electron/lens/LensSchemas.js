@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseWithWarnings = exports.ComprehensiveResponseSchema = exports.ElementsArraySchema = exports.ElementResponseSchema = exports.BoundsSchema = exports.RouteResponseSchema = void 0;
+exports.parseWithWarnings = exports.FocusedElementResponseSchema = exports.ComprehensiveResponseSchema = exports.ElementsArraySchema = exports.ElementResponseSchema = exports.BoundsSchema = exports.RouteResponseSchema = void 0;
 const zod_1 = require("zod");
 // Zod schemas for safe AI response parsing
 exports.RouteResponseSchema = zod_1.z.object({
@@ -29,20 +29,47 @@ exports.ElementResponseSchema = zod_1.z.object({
     bounds: exports.BoundsSchema.optional(),
     box: BoundsArraySchema.optional(), // Handle AI returning "box" array
     confidence: zod_1.z.number().min(0).max(1, 'Confidence must be between 0 and 1'),
-    detected_structure: zod_1.z.array(zod_1.z.string()).optional(),
+    detected_structure: zod_1.z.record(zod_1.z.string(), zod_1.z.object({
+        text: zod_1.z.string().min(1, 'Detected text is required'),
+        confidence: zod_1.z.number().min(0).max(1, 'Detected text confidence must be between 0 and 1'),
+        position_found: zod_1.z.string().optional() // Optional field
+    })),
     suggested_actions: zod_1.z.array(zod_1.z.string()).optional(),
     actions: zod_1.z.array(zod_1.z.string()).optional() // Handle AI returning "actions" instead
 }).transform((data) => ({
     type: data.type,
     bounds: data.bounds || data.box || { x: 0, y: 0, width: 0, height: 0 },
     confidence: data.confidence,
-    detected_structure: data.detected_structure || [],
+    detected_structure: data.detected_structure || {},
     suggested_actions: data.suggested_actions || data.actions || []
 }));
 exports.ElementsArraySchema = zod_1.z.array(exports.ElementResponseSchema);
 exports.ComprehensiveResponseSchema = zod_1.z.object({
     route: exports.RouteResponseSchema,
     elements: exports.ElementsArraySchema.optional().default([])
+});
+// Schema for focused rectangle analysis (E + drag functionality)
+exports.FocusedElementResponseSchema = zod_1.z.object({
+    element: zod_1.z.object({
+        type: zod_1.z.string().min(1, 'Element type is required'),
+        description: zod_1.z.string().min(1, 'Element description is required'),
+        confidence: zod_1.z.number().min(0).max(1, 'Confidence must be between 0 and 1'),
+        detected_structure: zod_1.z.record(zod_1.z.string(), zod_1.z.object({
+            text: zod_1.z.string().min(1, 'Detected text is required'),
+            confidence: zod_1.z.number().min(0).max(1, 'Detected text confidence must be between 0 and 1'),
+            position_found: zod_1.z.string().optional() // Optional field
+        })),
+        suggested_actions: zod_1.z.array(zod_1.z.string()).min(1, 'At least one suggested action required'),
+        ehr_context: zod_1.z.object({
+            page_type: zod_1.z.string(),
+            likely_workflow: zod_1.z.string().optional()
+        }).optional()
+    }),
+    context: zod_1.z.object({
+        appears_to_be: zod_1.z.string().min(1, 'Context description required'),
+        ui_pattern: zod_1.z.string().min(1, 'UI pattern classification required'),
+        confidence: zod_1.z.number().min(0).max(1).optional()
+    })
 });
 // Safe parsing utilities with warning messages
 exports.parseWithWarnings = {
@@ -75,6 +102,7 @@ exports.parseWithWarnings = {
     elements: (data) => {
         const result = exports.ElementsArraySchema.safeParse(data);
         const warnings = [];
+        console.log("result", result);
         if (!result.success) {
             warnings.push(`Elements parsing failed: ${result.error.message}`);
             // Try to extract partial elements
@@ -137,6 +165,48 @@ exports.parseWithWarnings = {
                 return { success: false, data: fallbackData, warnings };
             }
             return { success: false, warnings };
+        }
+        return { success: true, data: result.data, warnings };
+    },
+    focusedElement: (data) => {
+        console.log("🔍 Parsing focused element response:", data);
+        const result = exports.FocusedElementResponseSchema.safeParse(data);
+        console.log("FocusedElementResponseSchema result:", result);
+        const warnings = [];
+        if (!result.success) {
+            warnings.push(`Focused element parsing failed: ${result.error.message}`);
+            // Try to extract partial data with fallbacks
+            const rawData = typeof data === 'object' && data !== null ? data : {};
+            const fallbackData = {
+                element: {
+                    type: rawData.element?.type || 'unknown-element',
+                    description: rawData.element?.description || 'Unknown UI element',
+                    confidence: (typeof rawData.element?.confidence === 'number' &&
+                        rawData.element?.confidence >= 0 &&
+                        rawData.element?.confidence <= 1)
+                        ? rawData.element.confidence
+                        : 0.5,
+                    detectedStructure: rawData.element?.detected_structure || {},
+                    suggested_actions: Array.isArray(rawData.element?.suggested_actions)
+                        ? rawData.element.suggested_actions
+                        : ['View details', 'Click to interact'],
+                    ehr_context: {
+                        page_type: rawData.element?.ehr_context?.page_type || 'unknown-page',
+                        likely_workflow: rawData.element?.ehr_context?.likely_workflow || 'General interaction'
+                    }
+                },
+                context: {
+                    appears_to_be: rawData.context?.appears_to_be || 'UI element',
+                    ui_pattern: rawData.context?.ui_pattern || 'unknown',
+                    confidence: (typeof rawData.context?.confidence === 'number' &&
+                        rawData.context?.confidence >= 0 &&
+                        rawData.context?.confidence <= 1)
+                        ? rawData.context.confidence
+                        : 0.5
+                }
+            };
+            warnings.push(`Using fallback focused element data`);
+            return { success: false, data: fallbackData, warnings };
         }
         return { success: true, data: result.data, warnings };
     }
